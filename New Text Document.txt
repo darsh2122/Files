@@ -1,0 +1,29 @@
+import java.io.FileInputStream;
+import java.io.IOException;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+
+public class ExcelValidator {
+    public static void main(String[] args) {
+        String fileName = "path/to/excel/file.xlsx";
+        String expectedValue = "A";
+        try (FileInputStream fis = new FileInputStream(fileName);
+             Workbook wb = WorkbookFactory.create(fis)) {
+            for (Sheet sheet : wb) {
+                for (Row row : sheet) {
+                    for (Cell cell : row) {
+                        if (cell.getCellType() == CellType.STRING && !cell.getStringCellValue().equals(expectedValue)) {
+                            System.out.println("Invalid value in cell " + cell.getAddress());
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
