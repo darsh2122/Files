@@ -1,35 +1,12 @@
-import java.io.FileInputStream;
-import java.io.IOException;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.DataValidation;
-import org.apache.poi.ss.usermodel.DataValidationConstraint;
-import org.apache.poi.ss.usermodel.DataValidationHelper;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
-
-public class ExcelValidator {
-    public static void main(String[] args) {
-        String fileName = "path/to/excel/file.xlsx";
-        String expectedValue = "A";
-        try (FileInputStream fis = new FileInputStream(fileName);
-             Workbook wb = WorkbookFactory.create(fis)) {
-            DataValidationHelper dvHelper = wb.getCreationHelper().createDataValidationHelper();
-            DataValidationConstraint dvConstraint = dvHelper.createExplicitListConstraint(new String[] { expectedValue });
-            for (Sheet sheet : wb) {
-                DataValidation dv = dvHelper.createValidation(dvConstraint, sheet.getSheetName());
-                dv.setShowErrorBox(true);
-                for (Row row : sheet) {
-                    dv.setFirstColumn(0);
-                    dv.setLastColumn(row.getLastCellNum() - 1);
-                    dv.setFirstRow(row.getRowNum());
-                    dv.setLastRow(row.getRowNum());
-                    row.getSheet().addValidationData(dv);
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-}
+<dependencies>
+    <dependency>
+        <groupId>org.seleniumhq.selenium</groupId>
+        <artifactId>selenium-java</artifactId>
+        <version>3.141.59</version>
+    </dependency>
+    <dependency>
+        <groupId>org.seleniumhq.selenium</groupId>
+        <artifactId>selenium-server</artifactId>
+        <version>3.141.59</version>
+    </dependency>
+</dependencies>
