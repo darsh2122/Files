@@ -1,16 +1,33 @@
-public static void validateColumn3(Sheet sheet, String dateFormat) {
-    SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
-    for (Row row : sheet) {
-        Cell cell = row.getCell(2);
+public static void validateColumn1(Sheet sheet, String validValue) {
+    for (int i = 1; i < sheet.getPhysicalNumberOfRows(); i++) {
+        Row row = sheet.getRow(i);
+        Cell cell = row.getCell(0);
         if (cell.getCellType() == CellType.STRING) {
-            try {
-                sdf.parse(cell.getStringCellValue());
-                System.out.println("Valid format at row " + row.getRowNum() + ", column 3");
-            } catch (ParseException e) {
-                System.out.println("Invalid date format at row " + row.getRowNum() + ", column 3");
+            String value = cell.getStringCellValue();
+            if (value.equals(validValue)) {
+                System.out.println("Valid format at row " + row.getRowNum() + ", column 1");
+            } else {
+                System.out.println("Invalid format at row " + row.getRowNum() + ", column 1");
             }
         } else {
-            System.out.println("Invalid cell type or date format at row " + row.getRowNum() + ", column 3");
+            System.out.println("Invalid cell type or format at row " + row.getRowNum() + ", column 1");
+        }
+    }
+}
+
+public static void validateColumn2(Sheet sheet, String validValue) {
+    for (int i = 1; i < sheet.getPhysicalNumberOfRows(); i++) {
+        Row row = sheet.getRow(i);
+        Cell cell = row.getCell(1);
+        if (cell.getCellType() == CellType.STRING) {
+            String value = cell.getStringCellValue();
+            if (value.equals(validValue)) {
+                System.out.println("Valid format at row " + row.getRowNum() + ", column 2");
+            } else {
+                System.out.println("Invalid format at row " + row.getRowNum() + ", column 2");
+            }
+        } else {
+            System.out.println("Invalid cell type or format at row " + row.getRowNum() + ", column 2");
         }
     }
 }
