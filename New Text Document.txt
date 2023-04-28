@@ -1,12 +1,51 @@
-<dependencies>
-    <dependency>
-        <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>selenium-java</artifactId>
-        <version>3.141.59</version>
-    </dependency>
-    <dependency>
-        <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>selenium-server</artifactId>
-        <version>3.141.59</version>
-    </dependency>
-</dependencies>
+<import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+
+public class ExcelValidator {
+    public static void main(String[] args) {
+        String filePath = "path/to/excel/file.xlsx";
+        String sheetName = "Sheet1";
+        
+        try (FileInputStream fis = new FileInputStream(new File(filePath));
+             Workbook workbook = WorkbookFactory.create(fis)) {
+            
+            Sheet sheet = workbook.getSheet(sheetName);
+            
+            validateColumn1(sheet);
+            validateColumn2(sheet);
+            
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    public static void validateColumn1(Sheet sheet) {
+        for (Row row : sheet) {
+            Cell cell = row.getCell(0);
+            if (cell.getCellType() == CellType.STRING && cell.getStringCellValue().length() == 7) {
+                System.out.println("Valid format at row " + row.getRowNum() + ", column 1");
+            } else {
+                System.out.println("Invalid format at row " + row.getRowNum() + ", column 1");
+            }
+        }
+    }
+    
+    public static void validateColumn2(Sheet sheet) {
+        String expectedCharacter = "A";
+        for (Row row : sheet) {
+            Cell cell = row.getCell(1);
+            if (cell.getCellType() == CellType.STRING && cell.getStringCellValue().equals(expectedCharacter)) {
+                System.out.println("Valid format at row " + row.getRowNum() + ", column 2");
+            } else {
+                System.out.println("Invalid character at row " + row.getRowNum() + ", column 2");
+            }
+        }
+    }
+}
