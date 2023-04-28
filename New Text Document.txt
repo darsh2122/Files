@@ -1,13 +1,16 @@
 public static void validateColumn3(Sheet sheet, String dateFormat) {
-        SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
-        for (Row row : sheet) {
-            Cell cell = row.getCell(2);
-            if (cell.getCellType() == CellType.NUMERIC && org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
-                if (sdf.format(cell.getDateCellValue()).equals(cell.getStringCellValue())) {
-                    System.out.println("Valid format at row " + row.getRowNum() + ", column 3");
-                } else {
-                    System.out.println("Invalid date format at row " + row.getRowNum() + ", column 3");
-                }
-            } else {
-                System.out.println("Invalid cell type or date format at row " + row.getRowNum() + ", column 3");
+    SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
+    for (Row row : sheet) {
+        Cell cell = row.getCell(2);
+        if (cell.getCellType() == CellType.STRING) {
+            try {
+                sdf.parse(cell.getStringCellValue());
+                System.out.println("Valid format at row " + row.getRowNum() + ", column 3");
+            } catch (ParseException e) {
+                System.out.println("Invalid date format at row " + row.getRowNum() + ", column 3");
             }
+        } else {
+            System.out.println("Invalid cell type or date format at row " + row.getRowNum() + ", column 3");
+        }
+    }
+}
