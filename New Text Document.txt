@@ -1,33 +1,32 @@
-public static void validateColumn1(Sheet sheet, String validValue) {
-    for (int i = 1; i < sheet.getPhysicalNumberOfRows(); i++) {
-        Row row = sheet.getRow(i);
-        Cell cell = row.getCell(0);
-        if (cell.getCellType() == CellType.STRING) {
-            String value = cell.getStringCellValue();
-            if (value.equals(validValue)) {
-                System.out.println("Valid format at row " + row.getRowNum() + ", column 1");
-            } else {
-                System.out.println("Invalid format at row " + row.getRowNum() + ", column 1");
-            }
-        } else {
-            System.out.println("Invalid cell type or format at row " + row.getRowNum() + ", column 1");
-        }
+public static boolean validateStringLength(String str, int maxLength, int exactLength, boolean validateMaxLength, boolean validateExactLength) {
+    if (str == null) {
+        return false;
     }
+    
+    int length = str.length();
+    
+    if (validateMaxLength && length > maxLength) {
+        return false;
+    }
+    
+    if (validateExactLength && length != exactLength) {
+        return false;
+    }
+    
+    return true;
 }
 
-public static void validateColumn2(Sheet sheet, String validValue) {
-    for (int i = 1; i < sheet.getPhysicalNumberOfRows(); i++) {
-        Row row = sheet.getRow(i);
-        Cell cell = row.getCell(1);
-        if (cell.getCellType() == CellType.STRING) {
-            String value = cell.getStringCellValue();
-            if (value.equals(validValue)) {
-                System.out.println("Valid format at row " + row.getRowNum() + ", column 2");
-            } else {
-                System.out.println("Invalid format at row " + row.getRowNum() + ", column 2");
-            }
-        } else {
-            System.out.println("Invalid cell type or format at row " + row.getRowNum() + ", column 2");
-        }
-    }
+
+String inputString = "Hello, World!";
+int maxLength = 20;
+int exactLength = 13;
+boolean validateMaxLength = true;
+boolean validateExactLength = true;
+
+boolean isValid = validateStringLength(inputString, maxLength, exactLength, validateMaxLength, validateExactLength);
+
+if (isValid) {
+    System.out.println("The string is valid.");
+} else {
+    System.out.println("The string is invalid.");
 }
