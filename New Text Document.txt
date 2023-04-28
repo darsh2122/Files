@@ -12,77 +12,26 @@ public class ExcelValidator {
     public static void main(String[] args) {
         String filePath = "path/to/excel/file.xlsx";
         String sheetName = "Sheet1";
-        String expectedCharacter = "A";
+        String column1Validation = "7";  // Example validation condition for column 1
+        String column2Validation = "A";  // Example validation condition for column 2
         
         try (FileInputStream fis = new FileInputStream(new File(filePath));
              Workbook workbook = WorkbookFactory.create(fis)) {
             
             Sheet sheet = workbook.getSheet(sheetName);
             
-            for (Row row : sheet) {
-                Cell cell1 = row.getCell(0);
-                Cell cell2 = row.getCell(1);
-                
-                if (cell1.getCellType() == CellType.STRING && cell1.getStringCellValue().length() == 7) {
-                    if (cell2.getCellType() == CellType.STRING && cell2.getStringCellValue().equals(expectedCharacter)) {
-                        System.out.println("Valid format at row " + row.getRowNum());
-                    } else {
-                        System.out.println("Invalid character at row " + row.getRowNum() + ", column 2");
-                    }
-                } else {
-                    System.out.println("Invalid format at row " + row.getRowNum() + ", column 1");
-                }
-            }
-            
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-}
-This code reads an Excel file from the specified path, gets the sheet with the specified name, and iterates through all rows in the sheet. For each row, it retrieves the cells in the first and second columns, and checks their data types and values. If the first cell contains a string of 7 characters and the second cell contains the character "A", it prints a message indicating that the format is valid. If the first cell does not contain a string of 7 characters, it prints an error message indicating the row and column where the invalid format was found. If the second cell does not contain the character "A", it prints an error message indicating the row and column where the invalid character was found.
-
-
-
-
-darsh2122@gmail.com
-Can you write two separate methods for this validation?
-
-Yes, here are two separate methods that you can use to validate the format of cells in an Excel sheet, one for the first column containing strings of 7 characters, and the other for the second column containing the character "A":
-
-java
-Copy code
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
-
-public class ExcelValidator {
-    public static void main(String[] args) {
-        String filePath = "path/to/excel/file.xlsx";
-        String sheetName = "Sheet1";
-        
-        try (FileInputStream fis = new FileInputStream(new File(filePath));
-             Workbook workbook = WorkbookFactory.create(fis)) {
-            
-            Sheet sheet = workbook.getSheet(sheetName);
-            
-            validateColumn1(sheet);
-            validateColumn2(sheet);
+            validateColumn1(sheet, column1Validation);
+            validateColumn2(sheet, column2Validation);
             
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
     
-    public static void validateColumn1(Sheet sheet) {
+    public static void validateColumn1(Sheet sheet, String validationCondition) {
         for (Row row : sheet) {
             Cell cell = row.getCell(0);
-            if (cell.getCellType() == CellType.STRING && cell.getStringCellValue().length() == 7) {
+            if (cell.getCellType() == CellType.STRING && cell.getStringCellValue().length() == Integer.parseInt(validationCondition)) {
                 System.out.println("Valid format at row " + row.getRowNum() + ", column 1");
             } else {
                 System.out.println("Invalid format at row " + row.getRowNum() + ", column 1");
@@ -90,99 +39,10 @@ public class ExcelValidator {
         }
     }
     
-    public static void validateColumn2(Sheet sheet) {
-        String expectedCharacter = "A";
+    public static void validateColumn2(Sheet sheet, String validationCondition) {
         for (Row row : sheet) {
             Cell cell = row.getCell(1);
-            if (cell.getCellType() == CellType.STRING && cell.getStringCellValue().equals(expectedCharacter)) {
-                System.out.println("Valid format at row " + row.getRowNum() + ", column 2");
-            } else {
-                System.out.println("Invalid character at row " + row.getRowNum() + ", column 2");
-            }
-        }
-    }
-}
-In this code, the main method reads an Excel file from the specified path and gets the sheet with the specified name. It then calls the validateColumn1 and validateColumn2 methods, passing the sheet as a parameter.
-
-The validateColumn1 method iterates through all rows in the sheet and checks the first cell in each row. If the cell contains a string of 7 characters, it prints a message indicating that the format is valid. Otherwise, it prints an error message indicating the row and column where the invalid format was found.
-
-The validateColumn2 method iterates through all rows in the sheet and checks the second cell in each row. If the cell contains the character "A", it prints a message indicating that the format is valid. Otherwise, it prints an error message indicating the row and column where the invalid character was found.
-
-
-
-
-darsh2122@gmail.com
-No I want the user to add the Validation conditions 
-
-2 / 2
-
-
-!
-Sure! Here's an updated version of the code that prompts the user to enter the validation conditions for each column:
-
-java
-Copy code
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.util.Scanner;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
-
-public class ExcelValidator {
-    public static void main(String[] args) {
-        String filePath = "path/to/excel/file.xlsx";
-        String sheetName = "Sheet1";
-        
-        try (FileInputStream fis = new FileInputStream(new File(filePath));
-             Workbook workbook = WorkbookFactory.create(fis);
-             Scanner scanner = new Scanner(System.in)) {
-            
-            Sheet sheet = workbook.getSheet(sheetName);
-            
-            // Prompt user to enter validation conditions for column 1
-            System.out.print("Enter validation condition for column 1 (e.g. length=7): ");
-            String condition1 = scanner.nextLine();
-            
-            // Prompt user to enter validation conditions for column 2
-            System.out.print("Enter validation condition for column 2 (e.g. equals=A): ");
-            String condition2 = scanner.nextLine();
-            
-            validateColumn1(sheet, condition1);
-            validateColumn2(sheet, condition2);
-            
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-    
-    public static void validateColumn1(Sheet sheet, String condition) {
-        String[] parts = condition.split("=");
-        String attributeName = parts[0];
-        String attributeValue = parts[1];
-        
-        for (Row row : sheet) {
-            Cell cell = row.getCell(0);
-            if (cell.getCellType() == CellType.STRING && cell.getStringCellValue().length() == Integer.parseInt(attributeValue)) {
-                System.out.println("Valid format at row " + row.getRowNum() + ", column 1");
-            } else {
-                System.out.println("Invalid format at row " + row.getRowNum() + ", column 1");
-            }
-        }
-    }
-    
-    public static void validateColumn2(Sheet sheet, String condition) {
-        String[] parts = condition.split("=");
-        String attributeName = parts[0];
-        String attributeValue = parts[1];
-        
-        for (Row row : sheet) {
-            Cell cell = row.getCell(1);
-            if (cell.getCellType() == CellType.STRING && cell.getStringCellValue().equals(attributeValue)) {
+            if (cell.getCellType() == CellType.STRING && cell.getStringCellValue().equals(validationCondition)) {
                 System.out.println("Valid format at row " + row.getRowNum() + ", column 2");
             } else {
                 System.out.println("Invalid character at row " + row.getRowNum() + ", column 2");
