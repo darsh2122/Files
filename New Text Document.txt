@@ -117,14 +117,40 @@ public static boolean validateStringDigitsOnly(String str, int maxLength, int ex
 	    return validValuesUpper.contains(strUpper);
 	}
 	
-	public static boolean validateAmountString(String str, int digitsBeforeDecimal, int digitsAfterDecimal) {
-	    if (str == null) {
-	        return false;
-	    }
+	public static boolean validateAmountString(String str, int numDigitsBeforeDecimal) {
+    if (str == null) {
+        return false;
+    }
+    
+    String[] parts = str.split("\\.");
+    
+    if (parts.length != 2) {
+        return false;
+    }
+    
+    try {
+        int numBeforeDecimal = parts[0].length();
+        int numAfterDecimal = parts[1].length();
+        
+        if (numBeforeDecimal > numDigitsBeforeDecimal) {
+            return false;
+        }
+        
+        if (numBeforeDecimal == numDigitsBeforeDecimal && parts[0].charAt(0) > '9') {
+            return false;
+        }
+        
+        if (numAfterDecimal != 2) {
+            return false;
+        }
+        
+        Double.parseDouble(str);
+        return true;
+    } catch (NumberFormatException e) {
+        return false;
+    }
+}
 
-	    String regex = "^\\d{" + digitsBeforeDecimal + "}(\\.\\d{" + digitsAfterDecimal + "})?$";
-	    return str.matches(regex);
-	}
 
 	public static void main(String[] args) {
 		
