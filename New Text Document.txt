@@ -1,39 +1,33 @@
-public static boolean validateStringDigitsOnly(String str, int maxLength, int exactLength, boolean validateMaxLength, boolean validateExactLength) {
+ublic static boolean validateDigit(String str, int maxLength, int exactLength) {
 	    if (str == null) {
 	        return false;
 	    }
-	    
+
+	    if (!str.matches("\\d+")) {
+	        return false;
+	    }
+
 	    int length = str.length();
-	    
-	    if (validateMaxLength && length > maxLength) {
+
+	    if (length > maxLength || length < exactLength) {
 	        return false;
 	    }
-	    
-	    if (validateExactLength && length != exactLength) {
-	        return false;
-	    }
-	    
-	    for (int i = 0; i < length; i++) {
-	        if (!Character.isDigit(str.charAt(i))) {
-	            return false;
-	        }
-	    }
-	    
+
 	    return true;
 	}
 	
-	public static boolean validateStringLength(String str, int maxLength, int exactLength, boolean validateMaxLength, boolean validateExactLength) {
+	public static boolean validateStringLength(String str, int length, boolean isMaxLength) {
 	    if (str == null) {
 	        return false;
 	    }
 	    
-	    int length = str.length();
+	    int strLength = str.length();
 	    
-	    if (validateMaxLength && length > maxLength) {
+	    if (isMaxLength && strLength > length) {
 	        return false;
 	    }
 	    
-	    if (validateExactLength && length != exactLength) {
+	    if (!isMaxLength && strLength != length) {
 	        return false;
 	    }
 	    
