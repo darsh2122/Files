@@ -1,203 +1,29 @@
-ublic static boolean validateDigit(String str, int maxLength, int exactLength) {
-	    if (str == null) {
-	        return false;
-	    }
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
-	    if (!str.matches("\\d+")) {
-	        return false;
-	    }
-
-	    int length = str.length();
-
-	    if (length > maxLength || length < exactLength) {
-	        return false;
-	    }
-
-	    return true;
-	}
-	
-	public static boolean validateStringLength(String str, int length, boolean isMaxLength) {
-	    if (str == null) {
-	        return false;
-	    }
-	    
-	    int strLength = str.length();
-	    
-	    if (isMaxLength && strLength > length) {
-	        return false;
-	    }
-	    
-	    if (!isMaxLength && strLength != length) {
-	        return false;
-	    }
-	    
-	    return true;
-	}
-	
-	public static boolean validateDateString(String str) {
-	    if (str == null) {
-	        return false;
-	    }
-	    
-	    String[] parts = str.split("/");
-	    
-	    if (parts.length != 3) {
-	        return false;
-	    }
-	    
-	    try {
-	        int month = Integer.parseInt(parts[0]);
-	        int day = Integer.parseInt(parts[1]);
-	        int year = Integer.parseInt(parts[2]);
-	        
-	        if (month < 1 || month > 12) {
-	            return false;
-	        }
-	        
-	        int maxDays = getMaxDays(month, year);
-	        
-	        if (day < 1 || day > maxDays) {
-	            return false;
-	        }
-	        
-	        if (year < 0 || year > 99) {
-	            return false;
-	        }
-	        
-	        return true;
-	    } catch (NumberFormatException e) {
-	        return false;
-	    }
-	}
-
-	private static int getMaxDays(int month, int year) {
-	    switch (month) {
-	        case 2:
-	            return isLeapYear(year) ? 29 : 28;
-	        case 4:
-	        case 6:
-	        case 9:
-	        case 11:
-	            return 30;
-	        default:
-	            return 31;
-	    }
-	}
-
-	private static boolean isLeapYear(int year) {
-	    if (year % 4 != 0) {
-	        return false;
-	    } else if (year % 100 != 0) {
-	        return true;
-	    } else if (year % 400 != 0) {
-	        return false;
-	    } else {
-	        return true;
-	    }
-	}
-	
-	public static boolean validateStringInList(String str, List<String> validValues) {
-	    if (str == null || validValues == null) {
-	        return false;
-	    }
-
-	    // Convert the input string and valid values to uppercase
-	    String strUpper = str.toUpperCase();
-	    List<String> validValuesUpper = new ArrayList<>();
-	    for (String value : validValues) {
-	        validValuesUpper.add(value.toUpperCase());
-	    }
-
-	    return validValuesUpper.contains(strUpper);
-	}
-	
-	public static boolean validateAmountString(String str, int numDigitsBeforeDecimal) {
+public static boolean validateString(String str, int maxLength, int exactLength, boolean validateMaxLength, boolean validateExactLength, String expectedFormat) {
     if (str == null) {
         return false;
     }
     
-    String[] parts = str.split("\\.");
-    
-    if (parts.length != 2) {
+    if (validateMaxLength && str.length() > maxLength) {
         return false;
     }
     
+    if (validateExactLength && str.length() != exactLength) {
+        return false;
+    }
+    
+    SimpleDateFormat sdf = new SimpleDateFormat(expectedFormat);
+    sdf.setLenient(false);
+    
     try {
-        int numBeforeDecimal = parts[0].length();
-        int numAfterDecimal = parts[1].length();
+        Date date = sdf.parse(str);
+        String formattedDate = sdf.format(date);
         
-        if (numBeforeDecimal > numDigitsBeforeDecimal) {
-            return false;
-        }
-        
-        if (numBeforeDecimal == numDigitsBeforeDecimal && parts[0].charAt(0) > '9') {
-            return false;
-        }
-        
-        if (numAfterDecimal != 2) {
-            return false;
-        }
-        
-        Double.parseDouble(str);
-        return true;
-    } catch (NumberFormatException e) {
+        return str.equals(formattedDate);
+    } catch (ParseException e) {
         return false;
     }
 }
-
-
-	public static void main(String[] args) {
-		
-		String inputString = "CQ";
-		int maxLength = 2;
-		int exactLength = 8;
-		boolean validateMaxLength = false;
-		boolean validateExactLength = true;
-		int digitsBeforeDecimal = 5;
-		int digitsAfterDecimal = 2;
-		List<String> validValues = Arrays.asList("TA", "BA", "CQ");
-
-		boolean isValid = validateStringDigitsOnly(inputString, maxLength, exactLength, validateMaxLength, validateExactLength);
-
-		if (isValid) {
-		    System.out.println("The string contains only digits and satisfies any length validation requirements.");
-		} else {
-		    System.out.println("The string contains non-digit characters or does not satisfy length validation requirements.");
-		}
-		
-
-		boolean isValid2 = validateStringLength(inputString, maxLength, exactLength, validateMaxLength, validateExactLength);
-
-		if (isValid2) {
-		    System.out.println("The string is valid.");
-		} else {
-		    System.out.println("The string is invalid.");
-		}
-		
-		boolean isValid3 = validateDateString(inputString);
-
-		if (isValid3) {
-		    System.out.println("The string is valid.");
-		} else {
-		    System.out.println("The string is invalid.");
-		}
-		
-		boolean isValid4 = validateAmountString(inputString, digitsBeforeDecimal, digitsAfterDecimal);
-
-		if (isValid4) {
-		    System.out.println("The string is valid.");
-		} else {
-		    System.out.println("The string is invalid.");
-		}
-		
-		
-
-		boolean isValid5 = validateStringInList(inputString, validValues);
-
-		if (isValid5) {
-		    System.out.println("The string is valid.");
-		} else {
-		    System.out.println("The string is invalid.");
-		}
-		
-	}
