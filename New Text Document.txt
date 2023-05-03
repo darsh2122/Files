@@ -1,29 +1,33 @@
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+List<Variable> variables = new ArrayList<>();
 
-public static boolean validateString(String str, int maxLength, int exactLength, boolean validateMaxLength, boolean validateExactLength, String expectedFormat) {
-    if (str == null) {
-        return false;
+try {
+    // Execute the query to retrieve data from the table
+    ResultSet resultSet = statement.executeQuery("SELECT variable_name, value FROM my_table");
+
+    // Iterate over the result set to construct the Variable objects
+    while (resultSet.next()) {
+        String variableName = resultSet.getString("variable_name");
+        String value = resultSet.getString("value");
+
+        // Check if we already have a Variable object with this name in the list
+        Variable variable = null;
+        for (Variable existingVariable : variables) {
+            if (existingVariable.getVariableName().equals(variableName)) {
+                variable = existingVariable;
+                break;
+            }
+        }
+
+        // If we don't have a Variable object for this name yet, create one and add it to the list
+        if (variable == null) {
+            variable = new Variable(variableName, new ArrayList<>());
+            variables.add(variable);
+        }
+
+        // Add the value to the list of values for the variable
+        variable.getValues().add(value);
     }
-    
-    if (validateMaxLength && str.length() > maxLength) {
-        return false;
-    }
-    
-    if (validateExactLength && str.length() != exactLength) {
-        return false;
-    }
-    
-    SimpleDateFormat sdf = new SimpleDateFormat(expectedFormat);
-    sdf.setLenient(false);
-    
-    try {
-        Date date = sdf.parse(str);
-        String formattedDate = sdf.format(date);
-        
-        return str.equals(formattedDate);
-    } catch (ParseException e) {
-        return false;
-    }
+} catch (SQLException e) {
+    e.printStackTrace();
 }
+
