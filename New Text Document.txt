@@ -1,48 +1,47 @@
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.List;
 
-public class MyDatabaseChecker {
-    private static final String JDBC_DRIVER = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-    private static final String DB_URL = "jdbc:sqlserver://localhost;databaseName=myDatabase";
-    private static final String USER = "username";
-    private static final String PASSWORD = "password";
-
-    public static boolean areValuesPresentInTable(List<String> values) throws SQLException {
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-
-        try {
-            Class.forName(JDBC_DRIVER);
-            conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
-
-            // Use a prepared statement to avoid SQL injection attacks
-            String sql = "SELECT COUNT(*) FROM myTable WHERE myColumn IN (?)";
-            stmt = conn.prepareStatement(sql);
-
-            // Set the parameter value using a comma-separated list of values
-            String param = String.join(",", values);
-            stmt.setString(1, param);
-
-            rs = stmt.executeQuery();
-            if (rs.next()) {
-                int count = rs.getInt(1);
-                return count == values.size();
-            } else {
-                return false;
-            }
-        } catch (ClassNotFoundException e) {
-            // Handle driver loading error
-        } finally {
-            if (rs != null) {
-                rs.close();
-            }
-            if (stmt != null) {
-                stmt.close();
-            }
-            if (conn != null) {
-                conn.close();
-            }
-        }
+public class MyDatabase {
+  private Connection connection;
+  
+  public MyDatabase() {
+    // initialize database connection
+    try {
+      Class.forName("com.mysql.jdbc.Driver");
+      String url = "jdbc:mysql://localhost/mydatabase";
+      String username = "myusername";
+      String password = "mypassword";
+      connection = DriverManager.getConnection(url, username, password);
+    } catch (ClassNotFoundException e) {
+      e.printStackTrace();
+    } catch (SQLException e) {
+      e.printStackTrace();
     }
+  }
+  
+  public List<String> getVariablesForValue(String variableValue) {
+    List<String> variables = new ArrayList<String>();
+    try {
+      PreparedStatement statement = connection.prepareStatement("SELECT variable_name FROM my_table WHERE variable_value = ?");
+      statement.setString(1, variableValue);
+      ResultSet resultSet = statement.executeQuery();
+      while (resultSet.next()) {
+        variables.add(resultSet.getString("variable_name"));
+      }
+    } catch (SQLException e) {
+      e.printStackTrace();
+    }
+    return variables;
+  }
+  
+  public boolean checkValuesForVariable(String variableValue, List<String> variableNames) {
+    List<String> variablesInTable = getVariablesForValue(variableValue);
+    for (String variableName : variableNames) {
+      if (!variablesInTable.contains(variableName)) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
