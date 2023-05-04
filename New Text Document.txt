@@ -1,33 +1,65 @@
-List<Variable> variables = new ArrayList<>();
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-try {
-    // Execute the query to retrieve data from the table
-    ResultSet resultSet = statement.executeQuery("SELECT variable_name, value FROM my_table");
+public class DatabaseHelper {
 
-    // Iterate over the result set to construct the Variable objects
-    while (resultSet.next()) {
-        String variableName = resultSet.getString("variable_name");
-        String value = resultSet.getString("value");
+  // database connection details
+  private static final String URL = "jdbc:sqlserver://localhost:1433;databaseName=my_database";
+  private static final String USER = "my_username";
+  private static final String PASSWORD = "my_password";
 
-        // Check if we already have a Variable object with this name in the list
-        Variable variable = null;
-        for (Variable existingVariable : variables) {
-            if (existingVariable.getVariableName().equals(variableName)) {
-                variable = existingVariable;
-                break;
-            }
+  // retrieves a list of variables and their values from the database
+  public static List<Variable> getVariables() throws SQLException {
+    List<Variable> variables = new ArrayList<>();
+    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+         Statement stmt = conn.createStatement();
+         ResultSet rs = stmt.executeQuery("SELECT * FROM my_table")) {
+
+      // we use a map to keep track of variables by their ID
+      Map<Integer, Variable> variableMap = new HashMap<>();
+
+      // loop through the result set
+      while (rs.next()) {
+        int id = rs.getInt("id"); // retrieve the variable ID
+        String name = rs.getString("variable_name"); // retrieve the variable name
+        String value = rs.getString("variable_value"); // retrieve the variable value
+
+        // check if we've already encountered this variable
+        Variable var;
+        if (variableMap.containsKey(id)) {
+          // if so, get the existing variable object
+          var = variableMap.get(id);
+          // and add the new value to its list of values
+          var.getValues().add(value);
+        } else {
+          // if not, create a new variable object
+          var = new Variable(id, name, new ArrayList<>());
+          // and add the new value to its list of values
+          var.getValues().add(value);
+          // finally, add the variable object to the map
+          variableMap.put(id, var);
         }
+      }
 
-        // If we don't have a Variable object for this name yet, create one and add it to the list
-        if (variable == null) {
-            variable = new Variable(variableName, new ArrayList<>());
-            variables.add(variable);
-        }
-
-        // Add the value to the list of values for the variable
-        variable.getValues().add(value);
+      // add all variables in the map to the list of variables to return
+      variables.addAll(variableMap.values());
     }
-} catch (SQLException e) {
-    e.printStackTrace();
-}
+    // return the list of variables
+    return variables;
+  }
 
+  // checks if a given value is present in the table
+  public static boolean isValuePresent(String value) throws SQLException {
+    List<Variable> variables = getVariables();
+    // iterate over all variables and their values
+    for (Variable var : variables) {
+      for (String val : var.getValues()) {
+        // if the value matches, return true
+        if (val.equals(value)) {
+          return true;
+        }
+      }
+    }
