@@ -1,48 +1,33 @@
-import java.sql.*;
-import java.util.*;
+/**
 
-public class QueryExecutor {
-    public List<Variable> searchByVariableValue(String variableValue) throws SQLException {
-        List<Variable> variables = new ArrayList<>();
+Validates if a string consists of only digits and its length is either less than or equal to the given length or exactly equal to the given length based on the maxOrExact parameter
 
-        // Establish database connection and create statement
-        Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/mydatabase", "username", "password");
-        Statement statement = connection.createStatement();
+@param str the string to be validated
 
-        // Execute query and process results
-        ResultSet resultSet = statement.executeQuery("SELECT Variable_name, Variable_value FROM mytable WHERE Variable_value = '" + variableValue + "'");
-        while (resultSet.next()) {
-            String variableName = resultSet.getString("Variable_name");
-            String variableValueResult = resultSet.getString("Variable_value");
+@param length the maximum or exact length of the string depending on the value of maxOrExact parameter
 
-            // Check if variable already exists in list
-            Variable variable = null;
-            for (Variable v : variables) {
-                if (v.getName().equals(variableName)) {
-                    variable = v;
-                    break;
-                }
-            }
+@param maxOrExact the parameter to specify whether the length of the string should be less than or equal to the given length (MAX) or exactly equal to the given length (EXACT)
 
-            // If variable does not exist, create new variable and add to list
-            if (variable == null) {
-                List<String> values = new ArrayList<>();
-                values.add(variableValueResult);
-                variable = new Variable(variableName, values);
-                variables.add(variable);
-            }
-            // If variable already exists, add new value to its list of values
-            else {
-                variable.getValues().add(variableValueResult);
-            }
-        }
-
-        // Close database connection, statement, and result set
-        resultSet.close();
-        statement.close();
-        connection.close();
-
-        // Return list of variables
-        return variables;
-    }
+@return true if the string is a valid digit, false otherwise
+*/
+public static boolean validateDigit(String str, int length, String maxOrExact) {
+if (str == null) {
+return false;
 }
+
+if (!str.matches("\d+")) {
+return false;
+}
+
+int strLength = str.length();
+
+if (maxOrExact.equalsIgnoreCase("MAX") && strLength > length) {
+return false;
+}
+
+if (maxOrExact.equalsIgnoreCase("EXACT") && strLength != length) {
+return false;
+}
+return true;
+}
+
