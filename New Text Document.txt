@@ -1,74 +1,48 @@
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
-public class MyDatabase {
-  private Connection connection;
-  
-  public MyDatabase() {
-    // initialize database connection
-    try {
-      // Load the MySQL JDBC driver
-      Class.forName("com.mysql.jdbc.Driver");
-      
-      // Set the database URL, username, and password
-      String url = "jdbc:mysql://localhost/mydatabase";
-      String username = "myusername";
-      String password = "mypassword";
-      
-      // Connect to the database
-      connection = DriverManager.getConnection(url, username, password);
-    } catch (ClassNotFoundException e) {
-      e.printStackTrace();
-    } catch (SQLException e) {
-      e.printStackTrace();
+public class QueryExecutor {
+    public List<Variable> searchByVariableValue(String variableValue) throws SQLException {
+        List<Variable> variables = new ArrayList<>();
+
+        // Establish database connection and create statement
+        Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/mydatabase", "username", "password");
+        Statement statement = connection.createStatement();
+
+        // Execute query and process results
+        ResultSet resultSet = statement.executeQuery("SELECT Variable_name, Variable_value FROM mytable WHERE Variable_value = '" + variableValue + "'");
+        while (resultSet.next()) {
+            String variableName = resultSet.getString("Variable_name");
+            String variableValueResult = resultSet.getString("Variable_value");
+
+            // Check if variable already exists in list
+            Variable variable = null;
+            for (Variable v : variables) {
+                if (v.getName().equals(variableName)) {
+                    variable = v;
+                    break;
+                }
+            }
+
+            // If variable does not exist, create new variable and add to list
+            if (variable == null) {
+                List<String> values = new ArrayList<>();
+                values.add(variableValueResult);
+                variable = new Variable(variableName, values);
+                variables.add(variable);
+            }
+            // If variable already exists, add new value to its list of values
+            else {
+                variable.getValues().add(variableValueResult);
+            }
+        }
+
+        // Close database connection, statement, and result set
+        resultSet.close();
+        statement.close();
+        connection.close();
+
+        // Return list of variables
+        return variables;
     }
-  }
-  
-  /**
-   * Retrieves a list of variable names that have the given value in the "my_table" table.
-   * @param variableValue the value to search for in the table
-   * @return a list of variable names that have the given value in the table
-   */
-  public List<String> getVariablesForValue(String variableValue) {
-    List<String> variables = new ArrayList<String>();
-    try {
-      // Prepare a SQL statement with a parameter for the variable value
-      PreparedStatement statement = connection.prepareStatement("SELECT variable_name FROM my_table WHERE variable_value = ?");
-      statement.setString(1, variableValue);
-      
-      // Execute the statement and retrieve the results
-      ResultSet resultSet = statement.executeQuery();
-      
-      // Iterate over the results and add each variable name to the list
-      while (resultSet.next()) {
-        variables.add(resultSet.getString("variable_name"));
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
-    }
-    return variables;
-  }
-  
-  /**
-   * Checks whether all of the given variable names have the given value in the "my_table" table.
-   * @param variableValue the value to check for in the table
-   * @param variableNames the names of the variables to check in the table
-   * @return true if all of the variable names have the given value in the table, false otherwise
-   */
-  public boolean checkValuesForVariable(String variableValue, List<String> variableNames) {
-    // Get a list of variable names that have the given value in the table
-    List<String> variablesInTable = getVariablesForValue(variableValue);
-    
-    // Iterate over the given variable names and check if each one is in the list of variables in the table
-    for (String variableName : variableNames) {
-      if (!variablesInTable.contains(variableName)) {
-        // If a variable name is not in the list, return false immediately
-        return false;
-      }
-    }
-    
-    // If all of the variable names are in the list, return true
-    return true;
-  }
 }
