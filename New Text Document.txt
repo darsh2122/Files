@@ -63,3 +63,7 @@ public class DatabaseHelper {
         }
       }
     }
+    // if no match is found, return false
+    return false;
+  }
+}
