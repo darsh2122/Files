@@ -1,0 +1,26 @@
+import java.util.List;
+
+public class Variable {
+  private int id; // the ID of the variable
+  private String name; // the name of the variable
+  private List<String> values; // a list of values for the variable
+
+  public Variable(int id, String name, List<String> values) {
+    this.id = id;
+    this.name = name;
+    this.values = values;
+  }
+
+  // getters for the instance variables
+  public int getId() {
+    return id;
+  }
+
+  public String getName() {
+    return name;
+  }
+
+  public List<String> getValues() {
+    return values;
+  }
+}
