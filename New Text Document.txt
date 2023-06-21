@@ -1,13 +1,4 @@
-import org.apache.poi.xwpf.usermodel.*;
-import org.apache.poi.util.Units;
-
-import java.awt.*;
-import java.awt.image.BufferedImage;
-import java.io.*;
-
-public class ScreenshotToWord {
-    public static void main(String[] args) {
-        try {
+try {
             // Capture screenshot
             Rectangle screenRect = new Rectangle(800, 600);
             BufferedImage capture = new Robot().createScreenCapture(screenRect);
@@ -17,19 +8,21 @@ public class ScreenshotToWord {
             ImageIO.write(capture, "png", screenshotFile);
 
             // Create a Word document
-            XWPFDocument document = new XWPFDocument();
+            HWPFDocument document = new HWPFDocument();
 
-            // Add a paragraph with the screenshot
-            XWPFParagraph paragraph = document.createParagraph();
-            XWPFRun run = paragraph.createRun();
+            // Create a range for the document
+            Range range = document.getRange();
 
-            // Add the screenshot to the document
+            // Insert the screenshot into the range
             InputStream screenshotInputStream = new FileInputStream(screenshotFile);
-            run.addPicture(screenshotInputStream, XWPFDocument.PICTURE_TYPE_PNG, "screenshot.png", Units.toEMU(500), Units.toEMU(400));
-            screenshotInputStream.close();
+            Picture picture = document.addPicture(screenshotInputStream, Document.PICTURE_TYPE_PNG, "screenshot.png", Units.toPixels(500), Units.toPixels(400));
+            range = document.getRange();
+            range.insertBefore("\n");
+            range.insertBefore(picture);
+            range.insertAfter("\n");
 
             // Save the Word document
-            FileOutputStream outputStream = new FileOutputStream("screenshot.docx");
+            FileOutputStream outputStream = new FileOutputStream("screenshot.doc");
             document.write(outputStream);
             outputStream.close();
 
@@ -37,5 +30,3 @@ public class ScreenshotToWord {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-}
