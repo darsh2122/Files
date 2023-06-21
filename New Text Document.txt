@@ -1,199 +1,49 @@
-/**
+import java.awt.Rectangle;
+import java.awt.Robot;
+import java.awt.Toolkit;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import javax.imageio.ImageIO;
+import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
 
-Validates if a string consists of only digits and its length is either less than or equal to the given length or exactly equal to the given length based on the maxOrExact parameter
+public class WindowScreenshot {
 
-@param str the string to be validated
+    public static void main(String[] args) {
+        // Run the screenshot code on the event dispatch thread
+        SwingUtilities.invokeLater(() -> {
+            // Create a JFrame representing the target window
+            JFrame targetWindow = new JFrame("Target Window");
 
-@param length the maximum or exact length of the string depending on the value of maxOrExact parameter
+            // Make the target window visible to capture its contents
+            targetWindow.setVisible(true);
 
-@param maxOrExact the parameter to specify whether the length of the string should be less than or equal to the given length (MAX) or exactly equal to the given length (EXACT)
+            // Capture the screenshot of the target window
+            captureScreenshot(targetWindow);
 
-@return true if the string is a valid digit, false otherwise
-*/
-public static boolean validateDigit(String str, int length, String maxOrExact) {
-if (str == null) {
-return false;
-}
+            // Close the target window
+            targetWindow.dispose();
+        });
+    }
 
-if (!str.matches("\d+")) {
-return false;
-}
+    private static void captureScreenshot(JFrame window) {
+        try {
+            // Get the window bounds
+            Rectangle windowBounds = window.getBounds();
 
-int strLength = str.length();
+            // Create a Robot object
+            Robot robot = new Robot();
 
-if (maxOrExact.equalsIgnoreCase("MAX") && strLength > length) {
-return false;
-}
+            // Capture the screenshot of the window using Robot's createScreenCapture method
+            BufferedImage screenshotImage = robot.createScreenCapture(windowBounds);
 
-if (maxOrExact.equalsIgnoreCase("EXACT") && strLength != length) {
-return false;
-}
-return true;
-}
+            // Save the captured screenshot to a file
+            String screenshotPath = "C:/path/to/save/screenshot.png";
+            ImageIO.write(screenshotImage, "png", new File(screenshotPath));
 
-**
-
-Validates a string based on its length and whether it is equal to or less than a maximum length.
-
-@param str the string to be validated
-
-@param length the maximum length for the string
-
-@param maxOrExact the string indicating whether the length of the string should be equal to or less than the maximum length ("MAX" or "EXACT")
-
-@return true if the string is valid, false otherwise
-*/
-public static boolean validateString(String str, int length, String maxOrExact) {
-if (str == null) {
-return false;
-}
-
-int strLength = str.length();
-
-if (maxOrExact.equalsIgnoreCase("MAX") && strLength > length) {
-return false;
-}
-
-if (maxOrExact.equalsIgnoreCase("EXACT") && strLength != length) {
-return false;
-}
-
-return true;
-}
-
-/**
-
-Validates a date string against a specified date format.
-
-@param str the string to validate as a date
-
-@param dateFormat the expected date format of the string
-
-@return true if the string is a valid date in the specified format, false otherwise
-*/
-public static boolean validateDate(String str, String dateFormat) {
-if (str == null) {
-System.out.println("String is null");
-return false;
-}
-
-// Creating a SimpleDateFormat object with the specified date format and setting leniency to false
-SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
-sdf.setLenient(false);
-
-try {
-// Parsing the string into a date object using the SimpleDateFormat object
-Date date = sdf.parse(str);// Formatting the date back into a string using the same SimpleDateFormat object
- String formattedDate = sdf.format(date);
-
- // Comparing the original string with the formatted date string to check for validity
- return str.equals(formattedDate);} 
- catch (ParseException e) {
-return false;
-}
-
-/**
-
-This method validates a given value against a list of valid values stored in a database table.
-
-@param variableValue The value to be validated.
-
-@param VariableName The name of the variable whose value is to be validated.
-
-@param assetName The name of the asset for which the variable is being validated.
-
-@return A boolean value indicating whether the given value is valid or not.
-
-@throws SQLException if there is an error in executing the database query.
-*/
-public static boolean validateList(String variableValue, String VariableName, String assetName)
-throws SQLException {
-
-// initialize variables
-String connectionUrl = null;
-String query = "SELECT * FROM [TDW_DataValidation].[dbo].[TDM_VALIDATE_LIST] WHERE VARIABLE_VALUE = '"
-+ variableValue + "' AND VARIABLE_NAME = '" + VariableName + "' AND ASSET_NAME = '" + assetName + "'";
-Properties prop = new Properties();
-
-/-------------------------- load values from Config.properties-------------------/
-
-try {
-prop.load(new FileInputStream("config2.properties"));
-
-// get database connection parameters from properties file
-  String url = prop.getProperty("sqlUrl");
-  String port = prop.getProperty("sqlPort");
-  String user = prop.getProperty("sqlUser");
-  String password = prop.getProperty("sqlPassword");
-
-  connectionUrl = "jdbc:sqlserver:" + url + ":" + port + ";" + "user=" + user + ";" + "password=" + password
-  		+ ";";
-} catch (IOException e) {
-// handle exception if properties file not found or unable to load
-e.printStackTrace();
-}
-
-/* -------------------------- DB Connection ------------------------ */
-
-try (Connection connection = DriverManager.getConnection(connectionUrl);
-Statement statement = connection.createStatement();
-ResultSet rs = statement.executeQuery(query);) {
-/*----------------- Checking if there is any result------------------------*/
-
-  // if no result found, return false
-  if (!rs.isBeforeFirst()) {
-  	System.out.println("Invalid Selection");
-  	connection.close();
-  	return false;
-  } else {
-  	// if result found, return true
-  	connection.close();
-  	return true;
-  }}
-}
-
-/**
-
-Validates if a given string is a valid amount with the given number of digits before and after the decimal point.
-
-@param str the string to validate as an amount
-
-@param digitsBeforeDecimal the maximum number of digits allowed before the decimal point
-
-@param digitsAfterDecimal the exact number of digits required after the decimal point
-
-@return true if the string is a valid amount, false otherwise
-*/
-public static boolean validateAmount(String str, int digitsBeforeDecimal, int digitsAfterDecimal) {
-if (str == null) {
-return false;
-}
-
-String[] parts = str.split("\.");
-
-if (parts.length != 2) {
-return false;
-}
-
-try {
-int numBeforeDecimal = parts[0].length();
-int numAfterDecimal = parts[1].length();
-
-if (numBeforeDecimal > digitsBeforeDecimal) {
- 	return false;
- }
-
- if (numBeforeDecimal == digitsBeforeDecimal && parts[0].charAt(0) > '9') {
- 	return false;
- }
-
- if (numAfterDecimal != digitsAfterDecimal) {
- 	return false;
- }
-
- Double.parseDouble(str);
-return true;} 
-catch (NumberFormatException e) {
-return false;
-}
+            System.out.println("Screenshot captured and saved successfully.");
+        } catch (Exception ex) {
+            System.err.println("Failed to capture screenshot: " + ex.getMessage());
+        }
+    }
 }
