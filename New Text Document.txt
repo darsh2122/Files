@@ -1,32 +1,13 @@
-try {
-            // Capture screenshot
-            Rectangle screenRect = new Rectangle(800, 600);
-            BufferedImage capture = new Robot().createScreenCapture(screenRect);
+public static double convertAmount(String amount) {
+        double convertedAmount = 0.0;
 
-            // Save screenshot to a file
-            File screenshotFile = new File("screenshot.png");
-            ImageIO.write(capture, "png", screenshotFile);
-
-            // Create a Word document
-            HWPFDocument document = new HWPFDocument();
-
-            // Create a range for the document
-            Range range = document.getRange();
-
-            // Insert the screenshot into the range
-            InputStream screenshotInputStream = new FileInputStream(screenshotFile);
-            Picture picture = document.addPicture(screenshotInputStream, Document.PICTURE_TYPE_PNG, "screenshot.png", Units.toPixels(500), Units.toPixels(400));
-            range = document.getRange();
-            range.insertBefore("\n");
-            range.insertBefore(picture);
-            range.insertAfter("\n");
-
-            // Save the Word document
-            FileOutputStream outputStream = new FileOutputStream("screenshot.doc");
-            document.write(outputStream);
-            outputStream.close();
-
-            System.out.println("Screenshot captured and saved in Word document.");
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (amount.endsWith("CR")) {
+            String numericalValue = amount.substring(0, amount.length() - 2);
+            convertedAmount = Double.parseDouble(numericalValue);
+        } else if (amount.endsWith("DR")) {
+            String numericalValue = amount.substring(0, amount.length() - 2);
+            convertedAmount = -Double.parseDouble(numericalValue);
         }
+
+        return convertedAmount;
+    }
