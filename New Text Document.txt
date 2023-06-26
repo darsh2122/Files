@@ -1,13 +1,28 @@
-public static double convertAmount(String amount) {
-        double convertedAmount = 0.0;
+from PIL import Image
+from docx import Document
 
-        if (amount.endsWith("CR")) {
-            String numericalValue = amount.substring(0, amount.length() - 2);
-            convertedAmount = Double.parseDouble(numericalValue);
-        } else if (amount.endsWith("DR")) {
-            String numericalValue = amount.substring(0, amount.length() - 2);
-            convertedAmount = -Double.parseDouble(numericalValue);
-        }
+def segregate_screenshots(images_dir):
+    screenshots = []
+    for filename in os.listdir(images_dir):
+        if filename.endswith('.png'):
+            screenshots.append(os.path.join(images_dir, filename))
+    return screenshots
 
-        return convertedAmount;
-    }
+def insert_screenshots_to_word(screenshots, output_file):
+    document = Document()
+    for screenshot in screenshots:
+        document.add_picture(screenshot)
+    document.save(output_file)
+    print(f"Screenshots inserted into '{output_file}' successfully.")
+
+# Specify the directory where your PNG screenshots are located
+screenshots_dir = 'path/to/screenshots/directory'
+
+# Call the function to segregate the screenshots
+screenshots = segregate_screenshots(screenshots_dir)
+
+# Specify the output Word file name
+output_file = 'screenshots.docx'
+
+# Call the function to insert screenshots into Word
+insert_screenshots_to_word(screenshots, output_file)
