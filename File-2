@@ -1,2 +1,37 @@
-=LEFT(A1, FIND(" ", A1, FIND(" ", A1) + 1) - 1) & "*" & MID(A1, FIND(" ", A1, FIND(" ", A1) + 1) + 1, LEN(A1))
+import com.jcraft.jsch.*;
 
+public class SftpExample {
+
+    public static void main(String[] args) {
+        String host = "10.44.216.21";
+        String username = "your_username";
+        String password = "your_password";
+        String remoteFolderPath = "/data/input/SIT/WDS";
+
+        try {
+            JSch jsch = new JSch();
+            Session session = jsch.getSession(username, host, 22);
+            session.setPassword(password);
+            session.setConfig("StrictHostKeyChecking", "no");
+            session.connect();
+
+            ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
+            channelSftp.connect();
+
+            // Change to the remote directory
+            channelSftp.cd(remoteFolderPath);
+
+            // List the files in the remote directory
+            Vector<ChannelSftp.LsEntry> list = channelSftp.ls(".");
+            for (ChannelSftp.LsEntry entry : list) {
+                System.out.println(entry.getFilename());
+            }
+
+            // Disconnect
+            channelSftp.disconnect();
+            session.disconnect();
+        } catch (JSchException | SftpException e) {
+            e.printStackTrace();
+        }
+    }
+}
