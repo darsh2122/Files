@@ -1,37 +1,20 @@
-import com.jcraft.jsch.*;
-
-public class SftpExample {
-
-    public static void main(String[] args) {
-        String host = "10.44.216.21";
-        String username = "your_username";
-        String password = "your_password";
-        String remoteFolderPath = "/data/input/SIT/WDS";
-
-        try {
-            JSch jsch = new JSch();
-            Session session = jsch.getSession(username, host, 22);
-            session.setPassword(password);
-            session.setConfig("StrictHostKeyChecking", "no");
-            session.connect();
-
-            ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
-            channelSftp.connect();
-
-            // Change to the remote directory
-            channelSftp.cd(remoteFolderPath);
-
-            // List the files in the remote directory
-            Vector<ChannelSftp.LsEntry> list = channelSftp.ls(".");
-            for (ChannelSftp.LsEntry entry : list) {
-                System.out.println(entry.getFilename());
+private static void replaceFieldsRecursive(ObjectNode objectNode, String targetField, String replacement) {
+        objectNode.fields().forEachRemaining(entry -> {
+            if (entry.getValue().isObject()) {
+                // Recursively search in nested objects
+                replaceFieldsRecursive((ObjectNode) entry.getValue(), targetField, replacement);
+            } else if (entry.getValue().isArray()) {
+                // Recursively search in array elements
+                entry.getValue().elements().forEachRemaining(arrayElement -> {
+                    if (arrayElement.isObject()) {
+                        replaceFieldsRecursive((ObjectNode) arrayElement, targetField, replacement);
+                    }
+                });
+            } else {
+                // Replace the field if it matches the target field
+                if (entry.getKey().equals(targetField)) {
+                    objectNode.put(entry.getKey(), replacement);
+                }
             }
-
-            // Disconnect
-            channelSftp.disconnect();
-            session.disconnect();
-        } catch (JSchException | SftpException e) {
-            e.printStackTrace();
-        }
+        });
     }
-}
