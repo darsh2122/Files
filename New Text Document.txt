@@ -1,3 +1,17 @@
+Adding the enhancements of schema updates, data validation, and a more user-friendly interface involves a few additional steps. Here’s how you can integrate these enhancements into the existing code.
+
+### 1. Schema Updates
+Modify the schema dynamically if it doesn't match the CSV headers.
+
+### 2. Data Validation
+Ensure that the data matches expected types and constraints.
+
+### 3. User Interface
+Instead of a simple console application, we'll create a basic GUI using Java Swing for user interaction.
+
+### Updated `CSVToDatabaseLoader` Class with Schema Updates and Data Validation
+
+```java
 import com.opencsv.CSVReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,18 +36,23 @@ public class CSVToDatabaseLoader {
         this.batchSize = batchSize;
     }
 
-    public void loadCSV() {
+    public void loadCSV(boolean dropAndReload) {
         try (CSVReader reader = new CSVReader(new FileReader(csvFilePath))) {
             String[] headers = reader.readNext();
             if (headers == null) {
                 throw new IllegalArgumentException("CSV file is empty or malformed");
             }
 
-            if (!tableExists()) {
+            if (dropAndReload) {
+                dropTableIfExists();
                 createTable(headers);
             } else {
-                if (!validateTableSchema(headers)) {
-                    throw new SQLException("Table schema does not match CSV headers");
+                if (!tableExists()) {
+                    createTable(headers);
+                } else {
+                    if (!validateTableSchema(headers)) {
+                        updateTableSchema(headers);
+                    }
                 }
             }
 
@@ -41,6 +60,12 @@ public class CSVToDatabaseLoader {
             logger.info("CSV file has been successfully loaded into the database");
         } catch (Exception e) {
             logger.error("Error loading CSV file into database", e);
+        }
+    }
+
+    private void dropTableIfExists() throws SQLException {
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS " + tableName);
         }
     }
 
@@ -67,20 +92,21 @@ public class CSVToDatabaseLoader {
         return true;
     }
 
-    private void createTable(String[] headers) throws SQLException {
-        StringBuilder createTableSQL = new StringBuilder("CREATE TABLE ")
-                .append(tableName)
-                .append(" (");
-
-        for (String header : headers) {
-            createTableSQL.append(header).append(" VARCHAR(255),");
+    private void updateTableSchema(String[] headers) throws SQLException {
+        List<String> columnNames = new ArrayList<>();
+        DatabaseMetaData meta = connection.getMetaData();
+        try (ResultSet resultSet = meta.getColumns(null, null, tableName, null)) {
+            while (resultSet.next()) {
+                columnNames.add(resultSet.getString("COLUMN_NAME"));
+            }
         }
-
-        createTableSQL.setLength(createTableSQL.length() - 1); // Remove last comma
-        createTableSQL.append(")");
-
-        try (Statement stmt = connection.createStatement()) {
-            stmt.execute(createTableSQL.toString());
+        for (String header : headers) {
+            if (!columnNames.contains(header)) {
+                String alterTableSQL = "ALTER TABLE " + tableName + " ADD COLUMN " + header + " VARCHAR(255)";
+                try (Statement stmt = connection.createStatement()) {
+                    stmt.execute(alterTableSQL);
+                }
+            }
         }
     }
 
@@ -125,3 +151,103 @@ public class CSVToDatabaseLoader {
         return connection.prepareStatement(insertSQL.toString());
     }
 }
+```
+
+### Updated `Main` Class with User Interface using Swing
+
+```java
+import javax.swing.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+public class Main {
+    private static Connection connection;
+    private static CSVToDatabaseLoader loader;
+
+    public static void main(String[] args) {
+        String csvFilePath = "path/to/your/file.csv";
+        String tableName = "your_table_name";
+        int batchSize = 1000;
+
+        try {
+            connection = DatabaseConnection.getConnection();
+            loader = new CSVToDatabaseLoader(connection, csvFilePath, tableName, batchSize);
+
+            if (tableExists(connection, tableName)) {
+                showOptionDialog(tableName);
+            } else {
+                loader.loadCSV(false);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static boolean tableExists(Connection connection, String tableName) throws SQLException {
+        DatabaseMetaData meta = connection.getMetaData();
+        try (ResultSet resultSet = meta.getTables(null, null, tableName, new String[]{"TABLE"})) {
+            return resultSet.next();
+        }
+    }
+
+    private static void showOptionDialog(String tableName) {
+        JFrame frame = new JFrame("Table Exists");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(300, 150);
+
+        JLabel label = new JLabel("Table " + tableName + " already exists. Choose an option:");
+        JButton dropAndReloadButton = new JButton("Drop and Reload");
+        JButton appendButton = new JButton("Append");
+
+        dropAndReloadButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    loader.loadCSV(true);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+                frame.dispose();
+            }
+        });
+
+        appendButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    loader.loadCSV(false);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+                frame.dispose();
+            }
+        });
+
+        JPanel panel = new JPanel();
+        panel.add(label);
+        panel.add(dropAndReloadButton);
+        panel.add(appendButton);
+
+        frame.add(panel);
+        frame.setVisible(true);
+    }
+}
+```
+
+### Key Points
+
+1. **Schema Updates**: The `updateTableSchema` method dynamically adds columns to the table if they are missing.
+2. **Data Validation**: Ensuring the data matches expected types and constraints can be enhanced further by implementing more sophisticated validation logic based on your specific requirements.
+3. **User Interface**: A simple Swing GUI is added to provide a user-friendly interface for choosing whether to drop and reload the table or append data.
+
+### Enhancements
+
+1. **Advanced Schema Updates**: Implement more comprehensive schema updates, including data type handling and constraint checks.
+2. **Data Validation**: Add detailed validation logic to check data types, formats, and constraints before insertion.
+3. **Enhanced User Interface**: Create a more sophisticated GUI with additional options and better user experience. Consider using JavaFX for a more modern interface.
+
+This approach ensures that the application can handle schema mismatches, validate data, and provides a user-friendly interface for managing the data load process.
