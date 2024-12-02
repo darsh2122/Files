@@ -1,138 +1,75 @@
-import com.opencsv.CSVReader;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.FileReader;
-import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-
-public class CSVToDatabaseLoader {
-    private static final Logger logger = LoggerFactory.getLogger(CSVToDatabaseLoader.class);
-
-    private final Connection connection;
-    private final String csvFilePath;
-    private final String tableName;
-    private final int batchSize;
-
-    public CSVToDatabaseLoader(Connection connection, String csvFilePath, String tableName, int batchSize) {
-        this.connection = connection;
-        this.csvFilePath = csvFilePath;
-        this.tableName = tableName;
-        this.batchSize = batchSize;
-    }
-
-    public void loadCSV(boolean dropAndReload) {
-        try (CSVReader reader = new CSVReader(new FileReader(csvFilePath))) {
-            String[] headers = reader.readNext();
-            if (headers == null) {
-                throw new IllegalArgumentException("CSV file is empty or malformed");
-            }
-
-            if (dropAndReload) {
-                dropTableIfExists();
-                createTable(headers);
-            } else {
-                if (!tableExists()) {
-                    createTable(headers);
-                } else {
-                    if (!validateTableSchema(headers)) {
-                        throw new SQLException("Table schema does not match CSV headers");
-                    }
-                }
-            }
-
-            loadData(reader, headers);
-            logger.info("CSV file has been successfully loaded into the database");
-        } catch (Exception e) {
-            logger.error("Error loading CSV file into database", e);
-        }
-    }
-
-    private void dropTableIfExists() throws SQLException {
-        try (Statement stmt = connection.createStatement()) {
-            stmt.execute("DROP TABLE IF EXISTS " + tableName);
-        }
-    }
-
-    private boolean tableExists() throws SQLException {
-        DatabaseMetaData meta = connection.getMetaData();
-        try (ResultSet resultSet = meta.getTables(null, null, tableName, new String[]{"TABLE"})) {
-            return resultSet.next();
-        }
-    }
-
-    private boolean validateTableSchema(String[] headers) throws SQLException {
-        List<String> columnNames = new ArrayList<>();
-        DatabaseMetaData meta = connection.getMetaData();
-        try (ResultSet resultSet = meta.getColumns(null, null, tableName, null)) {
-            while (resultSet.next()) {
-                columnNames.add(resultSet.getString("COLUMN_NAME"));
-            }
-        }
-        for (String header : headers) {
-            if (!columnNames.contains(header)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private void createTable(String[] headers) throws SQLException {
-        StringBuilder createTableSQL = new StringBuilder("CREATE TABLE ")
-                .append(tableName)
-                .append(" (");
-
-        for (String header : headers) {
-            createTableSQL.append(header).append(" VARCHAR(255),");
-        }
-
-        createTableSQL.setLength(createTableSQL.length() - 1); // Remove last comma
-        createTableSQL.append(")");
-
-        try (Statement stmt = connection.createStatement()) {
-            stmt.execute(createTableSQL.toString());
-        }
-    }
-
-    private void loadData(CSVReader reader, String[] headers) throws SQLException {
-        String[] line;
-        int count = 0;
-        try (PreparedStatement pstmt = createInsertPreparedStatement(headers)) {
-            while ((line = reader.readNext()) != null) {
-                for (int i = 0; i < line.length; i++) {
-                    pstmt.setString(i + 1, line[i]);
-                }
-                pstmt.addBatch();
-                count++;
-
-                if (count % batchSize == 0) {
-                    pstmt.executeBatch();
-                }
-            }
-            pstmt.executeBatch(); // Execute the remaining batch
-        }
-    }
-
-    private PreparedStatement createInsertPreparedStatement(String[] headers) throws SQLException {
-        StringBuilder insertSQL = new StringBuilder("INSERT INTO ")
-                .append(tableName)
-                .append(" (");
-
-        for (String header : headers) {
-            insertSQL.append(header).append(",");
-        }
-
-        insertSQL.setLength(insertSQL.length() - 1); // Remove last comma
-        insertSQL.append(") VALUES (");
-
-        for (int i = 0; i < headers.length; i++) {
-            insertSQL.append("?,");
-        }
-
-        insertSQL.setLength(insertSQL.length() - 1); // Remove last comma
-        insertSQL.append(")");
-
-        return connection.prepareStatement(insertSQL.toString());
-    }
-}
+//SF6COMBI JOB (2353,020),'COMBINED CIF JOB',CLASS=H,MSGCLASS=W,
+//         NOTIFY=&SYSUID
+//*
+//* THIS JOB COMBINES THE CREATION AND LOADING OF CIF FILES
+//*
+// SET TSTSET='F6'
+// SET IPFILE='DDST.SBIAUTO.CIFLOAD.F6.FORMTD(0)'
+// SET IPFILE2='DDST.SBIAUTO.CIFLOAD.JAVA.IP(0)'
+// SET ACCFILE='DDST.SBIAUTO.CIFLOAD.F6.XCIFACC(+1)'
+// SET GLSFILE='DDST.SBIAUTO.CIFLOAD.F6.ZCIFGS0D(+1)'
+// SET EVGFILE='DDST.SBIAUTO.CIFLOAD.F6.ZCIFD00D(+1)'
+// SET PICFILE='DDST.SBIAUTO.CIFLOAD.F6.ZCIFGT0D(+1)'
+// SET TDAFILE='DDST.SBIAUTO.CIFLOAD.F6.ZCIFGW0D(+1)'
+//*
+//JCLLIB ORDER=(DDST.TDWI-TDM.SBIAUTO.PROCLIB)
+//*
+//* PROC TO CREATE FILES
+//*
+//CREATE01 PROC
+//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFA00D
+//A00D01   EXEC PCIFACC
+//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFGW0D FOR TDA
+//GW0D02   EXEC PCIFTDA
+//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFGS0D FOR GLS
+//GS0D03   EXEC PCIFGLS
+//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFD00D FOR EVG
+//D00D04   EXEC PCIFEVG
+//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFGT0D FOR PIC
+//GT0D05   EXEC PCIFPIC
+//*
+//*
+//* PROC TO LOAD FILES
+//*
+//LOAD01 PROC
+//* PROC TO LOAD ACCOUNTS IN ZCIFA00D ACCOUNT SEGMENT
+//A00D01L  EXEC PCIFACCL
+//* PROC TO LOAD ACCOUNTS IN ZCIFGW0D SEGMENT FOR TDA
+//GW0D02L  EXEC PCIFTDAL
+//* PROC TO LOAD ACCOUNTS IN ZCIFGS0D SEGMENT FOR GLS
+//GS0D03L  EXEC PCIFGLSL
+//* PROC TO LOAD ACCOUNTS IN ZCIFD00D SEGMENT FOR EVG
+//D00D04L  EXEC PCIFEVGL
+//* PROC TO LOAD ACCOUNTS IN ZCIFGT0D SEGMENT FOR PIC
+//GT0D05L  EXEC PCIFPICL
+//*
+//=====================================================================
+// STEP TO CREATE FILES
+//=====================================================================
+//CREATE   EXEC CREATE01
+//*
+//=====================================================================
+// STEP TO LOAD FILES
+//=====================================================================
+//LOAD     EXEC LOAD01
+//*
+//=====================================================================
+// STEP TO TRIGGER THE GLS QUERY CREATION JOB
+//=====================================================================
+//TRIG06   EXEC PGM=TDLINK,PARM=IEBGENER
+//SYSUT1   DD  DSN=DDST.TDWI-TDM.SBIAUTO.SETF6.JCLLIB(JSBIGLST),
+//         DISP=SHR
+//SYSUT2   DD  SYSOUT=(3,INTRDR)
+//SYSIN    DD  DUMMY
+//SYSPRINT DD  DUMMY
+//*
+//=====================================================================
+// STEP TO TRIGGER THE LOAD JOB
+//=====================================================================
+//STEP06   EXEC PGM=TDLINK,PARM=IEBGENER
+//SYSUT1   DD  DSN=DDST.TDWI-TDM.SBIAUTO.SETF6.JCLLIB(JSBIAU04),
+//         DISP=SHR
+//SYSUT2   DD  SYSOUT=(3,INTRDR)
+//SYSIN    DD  DUMMY
+//SYSPRINT DD  DUMMY
+//* 
