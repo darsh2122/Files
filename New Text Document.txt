@@ -1,75 +1,27 @@
-//SF6COMBI JOB (2353,020),'COMBINED CIF JOB',CLASS=H,MSGCLASS=W,
-//         NOTIFY=&SYSUID
-//*
-//* THIS JOB COMBINES THE CREATION AND LOADING OF CIF FILES
-//*
-// SET TSTSET='F6'
-// SET IPFILE='DDST.SBIAUTO.CIFLOAD.F6.FORMTD(0)'
-// SET IPFILE2='DDST.SBIAUTO.CIFLOAD.JAVA.IP(0)'
-// SET ACCFILE='DDST.SBIAUTO.CIFLOAD.F6.XCIFACC(+1)'
-// SET GLSFILE='DDST.SBIAUTO.CIFLOAD.F6.ZCIFGS0D(+1)'
-// SET EVGFILE='DDST.SBIAUTO.CIFLOAD.F6.ZCIFD00D(+1)'
-// SET PICFILE='DDST.SBIAUTO.CIFLOAD.F6.ZCIFGT0D(+1)'
-// SET TDAFILE='DDST.SBIAUTO.CIFLOAD.F6.ZCIFGW0D(+1)'
-//*
-//JCLLIB ORDER=(DDST.TDWI-TDM.SBIAUTO.PROCLIB)
-//*
-//* PROC TO CREATE FILES
-//*
-//CREATE01 PROC
-//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFA00D
-//A00D01   EXEC PCIFACC
-//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFGW0D FOR TDA
-//GW0D02   EXEC PCIFTDA
-//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFGS0D FOR GLS
-//GS0D03   EXEC PCIFGLS
-//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFD00D FOR EVG
-//D00D04   EXEC PCIFEVG
-//* PROC TO CREATE THE FILE TO LOAD ACCOUNTS IN ZCIFGT0D FOR PIC
-//GT0D05   EXEC PCIFPIC
-//*
-//*
-//* PROC TO LOAD FILES
-//*
-//LOAD01 PROC
-//* PROC TO LOAD ACCOUNTS IN ZCIFA00D ACCOUNT SEGMENT
-//A00D01L  EXEC PCIFACCL
-//* PROC TO LOAD ACCOUNTS IN ZCIFGW0D SEGMENT FOR TDA
-//GW0D02L  EXEC PCIFTDAL
-//* PROC TO LOAD ACCOUNTS IN ZCIFGS0D SEGMENT FOR GLS
-//GS0D03L  EXEC PCIFGLSL
-//* PROC TO LOAD ACCOUNTS IN ZCIFD00D SEGMENT FOR EVG
-//D00D04L  EXEC PCIFEVGL
-//* PROC TO LOAD ACCOUNTS IN ZCIFGT0D SEGMENT FOR PIC
-//GT0D05L  EXEC PCIFPICL
-//*
-//=====================================================================
-// STEP TO CREATE FILES
-//=====================================================================
-//CREATE   EXEC CREATE01
-//*
-//=====================================================================
-// STEP TO LOAD FILES
-//=====================================================================
-//LOAD     EXEC LOAD01
-//*
-//=====================================================================
-// STEP TO TRIGGER THE GLS QUERY CREATION JOB
-//=====================================================================
-//TRIG06   EXEC PGM=TDLINK,PARM=IEBGENER
-//SYSUT1   DD  DSN=DDST.TDWI-TDM.SBIAUTO.SETF6.JCLLIB(JSBIGLST),
-//         DISP=SHR
-//SYSUT2   DD  SYSOUT=(3,INTRDR)
-//SYSIN    DD  DUMMY
-//SYSPRINT DD  DUMMY
-//*
-//=====================================================================
-// STEP TO TRIGGER THE LOAD JOB
-//=====================================================================
-//STEP06   EXEC PGM=TDLINK,PARM=IEBGENER
-//SYSUT1   DD  DSN=DDST.TDWI-TDM.SBIAUTO.SETF6.JCLLIB(JSBIAU04),
-//         DISP=SHR
-//SYSUT2   DD  SYSOUT=(3,INTRDR)
-//SYSIN    DD  DUMMY
-//SYSPRINT DD  DUMMY
-//* 
+import com.ibm.jzos.ZUtil;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+
+public class JobStatusChecker {
+    public static void main(String[] args) {
+        String jobId = "JOB96341";
+        try {
+            // Run TSO command to check job status
+            Process process = Runtime.getRuntime().exec(
+                "tsocmd 'STATUS " + jobId + "'"
+            );
+            InputStream input = process.getInputStream();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(input));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.contains("STATUS")) {
+                    System.out.println("Job Status: " + line);
+                }
+            }
+            process.waitFor();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
