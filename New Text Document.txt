@@ -1,27 +1,117 @@
-import com.ibm.jzos.ZUtil;
+To check the status of a mainframe job using `FTPSClient` in Java, you can switch to JES mode, retrieve the job listing, and parse the job status. Here's a step-by-step approach with code:
+
+### Approach
+1. **Connect and Log In**: Establish an FTPS connection to the mainframe.
+2. **Switch to JES Mode**: Use the `SITE FILE=JES` command to access job information.
+3. **Retrieve Job List**: Fetch the list of jobs from the JES spool.
+4. **Parse Job Status**: Extract the status of the specific job ID from the listing.
+
+### Solution Code
+```java
+import org.apache.commons.net.ftp.FTPReply;
+import org.apache.commons.net.ftp.FTPSClient;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 
 public class JobStatusChecker {
+
     public static void main(String[] args) {
-        String jobId = "JOB96341";
+        String host = "your.mainframe.host";
+        int port = 21; // Use 990 for implicit FTPS
+        String username = "username";
+        String password = "password";
+        String jobId = "J0B15232"; // The job ID to check
+
+        FTPSClient ftps = new FTPSClient(true); // true for implicit FTPS
+
         try {
-            // Run TSO command to check job status
-            Process process = Runtime.getRuntime().exec(
-                "tsocmd 'STATUS " + jobId + "'"
-            );
-            InputStream input = process.getInputStream();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.contains("STATUS")) {
-                    System.out.println("Job Status: " + line);
+            // Connect and login
+            ftps.connect(host, port);
+            if (!FTPReply.isPositiveCompletion(ftps.getReplyCode())) {
+                System.err.println("Connection failed: " + ftps.getReplyString());
+                return;
+            }
+
+            if (!ftps.login(username, password)) {
+                System.err.println("Login failed: " + ftps.getReplyString());
+                return;
+            }
+
+            // Set protection buffer size and data channel protection
+            ftps.execPBSZ(0);
+            ftps.execPROT("P");
+
+            // Switch to JES mode
+            if (!ftps.sendSiteCommand("FILE=JES")) {
+                System.err.println("Failed to switch to JES mode: " + ftps.getReplyString());
+                return;
+            }
+
+            // Retrieve job listing
+            ftps.enterLocalPassiveMode();
+            InputStream is = ftps.retrieveFileStream("");
+            if (is == null) {
+                System.err.println("Failed to retrieve jobs: " + ftps.getReplyString());
+                return;
+            }
+
+            // Parse job status
+            String status = null;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty() || line.startsWith("JOBNAME")) {
+                        continue; // Skip headers and empty lines
+                    }
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 3 && parts[1].equalsIgnoreCase(jobId)) {
+                        status = parts[2];
+                        break;
+                    }
                 }
             }
-            process.waitFor();
-        } catch (Exception e) {
+
+            ftps.completePendingCommand(); // Complete the RETR command
+
+            // Output status
+            if (status != null) {
+                System.out.println("Job " + jobId + " status: " + status);
+                if ("OUTPUT".equalsIgnoreCase(status)) {
+                    System.out.println("Job completed successfully.");
+                } else {
+                    System.out.println("Job is in " + status + " state.");
+                }
+            } else {
+                System.out.println("Job " + jobId + " not found.");
+            }
+
+        } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+            try {
+                if (ftps.isConnected()) {
+                    ftps.disconnect();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 }
+```
+
+### Explanation
+1. **FTPS Connection**: The code uses implicit FTPS (port 990) by default. Adjust the port if your mainframe uses explicit FTPS (port 21).
+2. **JES Mode**: Switching to JES mode allows interaction with the job queue instead of the file system.
+3. **Job Listing**: The job list is retrieved as an input stream. Each line is parsed to find the job ID and its corresponding status.
+4. **Status Parsing**: The job status is determined by checking the third field in each line of the JES listing. Common statuses include `INPUT`, `ACTIVE`, and `OUTPUT`.
+
+### Notes
+- **JES Format**: The parsing logic assumes the job ID is the second field and the status is the third. Adjust the indices if your mainframe's JES listing format differs.
+- **Error Handling**: The example includes basic error handling. Enhance it based on your requirements (e.g., retries, logging).
+- **Security**: Ensure FTPS settings (e.g., certificate validation) match your mainframe's configuration.
+
+This approach allows you to check the job status programmatically using FTPS without terminal access or additional APIs.
