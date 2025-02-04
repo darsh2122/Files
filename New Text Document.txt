@@ -2,7 +2,6 @@ import net.sf.JRecord.JRecordInterface1;
 import net.sf.JRecord.Common.Constants;
 import net.sf.JRecord.Details.AbstractLine;
 import net.sf.JRecord.IO.AbstractLineReader;
-import net.sf.JRecord.IO.AbstractLineWriter;
 import net.sf.JRecord.IO.CobolIoProvider;
 import net.sf.JRecord.Numeric.Convert;
 import net.sf.JRecord.def.IO.builders.ICobolIOBuilder;
@@ -21,12 +20,13 @@ public class MainframeToCsv {
         // Define the Cobol IO Builder
         ICobolIOBuilder ioBuilder = JRecordInterface1.COBOL
                 .newIOBuilder(copybookPath)
-                .setFileOrganization(Constants.IO_FIXED_LENGTH)
+                .setFileOrganization(Constants.IO_FIXED_LENGTH) // Fixed-length records
                 .setFont("CP037") // EBCDIC encoding
-                .setDialect(Convert.FMT_MAINFRAME);
+                .setDialect(Convert.FMT_MAINFRAME); // Mainframe dialect
 
         // Create a reader for the input file
-        AbstractLineReader reader = CobolIoProvider.getInstance().getLineReader(ioBuilder);
+        CobolIoProvider ioProvider = CobolIoProvider.getInstance();
+        AbstractLineReader reader = ioProvider.getLineReader(ioBuilder);
         reader.open(inputFilePath);
 
         // Create a writer for the CSV file
