@@ -1,51 +1,179 @@
-import net.sf.JRecord.JRecordInterface1;
-import net.sf.JRecord.Common.Constants;
-import net.sf.JRecord.Details.AbstractLine;
-import net.sf.JRecord.IO.AbstractLineReader;
-import net.sf.JRecord.IO.CobolIoProvider;
-import net.sf.JRecord.Numeric.Convert;
-import net.sf.JRecord.def.IO.builders.ICobolIOBuilder;
+If you prefer an alternative to **JRecord**, here's another approach using the **LegStar** library, which is designed for mainframe integration. This method involves generating Java classes from the copybook and using them to parse the mainframe file.
 
+---
+
+### Approach 1: Using LegStar (Recommended)
+
+#### Step 1: Add LegStar Dependencies
+Add LegStar dependencies to your `pom.xml` (Maven):
+
+```xml
+<dependency>
+    <groupId>com.legstar</groupId>
+    <artifactId>legstar-cob2xsd</artifactId>
+    <version>6.7.0</version>
+</dependency>
+<dependency>
+    <groupId>com.legstar</groupId>
+    <artifactId>legstar-jaxb</artifactId>
+    <version>6.7.0</version>
+</dependency>
+<dependency>
+    <groupId>com.legstar</groupId>
+    <artifactId>legstar-coxb</artifactId>
+    <version>6.7.0</version>
+</dependency>
+```
+
+#### Step 2: Generate Java Classes from the Copybook
+LegStar requires you to generate Java classes from the COBOL copybook. Use the `cob2xsd` and `jaxb` Maven plugins to automate this. Example configuration in `pom.xml`:
+
+```xml
+<build>
+  <plugins>
+    <plugin>
+      <groupId>com.legstar</groupId>
+      <artifactId>legstar-cob2xsd-maven-plugin</artifactId>
+      <version>6.7.0</version>
+      <executions>
+        <execution>
+          <id>generate-xsd</id>
+          <goals><goal>cob2xsd</goal></goals>
+          <configuration>
+            <inputFile>${basedir}/src/main/resources/copybook.cbl</inputFile>
+            <outputDir>${basedir}/target/generated-sources/xsd</outputDir>
+          </configuration>
+        </execution>
+      </executions>
+    </plugin>
+    <plugin>
+      <groupId>org.codehaus.mojo</groupId>
+      <artifactId>jaxb2-maven-plugin</artifactId>
+      <version>3.1.0</version>
+      <executions>
+        <execution>
+          <id>generate-java-classes</id>
+          <goals><goal>xjc</goal></goals>
+          <configuration>
+            <sources>${basedir}/target/generated-sources/xsd</sources>
+            <outputDirectory>${basedir}/target/generated-sources/jaxb</outputDirectory>
+          </configuration>
+        </execution>
+      </executions>
+    </plugin>
+  </plugins>
+</build>
+```
+
+Run `mvn generate-sources` to generate Java classes from your copybook.
+
+---
+
+#### Step 3: Read the Mainframe File and Write CSV
+Use the generated classes to parse the mainframe file:
+
+```java
+import com.legstar.coxb.host.HostException;
+import com.legstar.jaxb.converter.JaxbWrapper;
+import com.legstar.jaxb.converter.JaxbWrapperFactory;
+
+import java.io.BufferedWriter;
+import java.io.FileInputStream;
 import java.io.FileWriter;
-import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 
-public class MainframeToCsv {
+public class MainframeToCsvLegStar {
 
-    public static void main(String[] args) throws IOException {
-        String inputFilePath = "path/to/mainframe/file.dat";
-        String copybookPath = "path/to/copybook.cbl";
-        String outputCsvPath = "path/to/output.csv";
+    public static void main(String[] args) throws Exception {
+        String inputFile = "path/to/mainframe/file";
+        String outputCsv = "path/to/output.csv";
 
-        // Step 1: Build the Cobol IO configuration
-        ICobolIOBuilder ioBuilder = JRecordInterface1.COBOL
-                .newIOBuilder(copybookPath)
-                .setFileOrganization(Constants.IO_FIXED_LENGTH) // Fixed-length records
-                .setFont("CP037") // EBCDIC encoding
-                .setDialect(Convert.FMT_MAINFRAME) // Mainframe format
-                .setSplitCopybook(Constants.SPLIT_NONE); // Adjust if copybook has multiple layouts
+        // Initialize JAXB wrapper for the generated class (e.g., "CustomerRecord")
+        JaxbWrapperFactory factory = new JaxbWrapperFactory();
+        JaxbWrapper<?> wrapper = factory.create("com.example.generated.CustomerRecord");
 
-        // Step 2: Create a line reader using the IO Builder
-        CobolIoProvider ioProvider = CobolIoProvider.getInstance();
-        AbstractLineReader reader = ioProvider.getLineReader(ioBuilder);
-        reader.open(inputFilePath);
+        try (
+            FileInputStream fis = new FileInputStream(inputFile);
+            FileChannel channel = fis.getChannel();
+            BufferedWriter csvWriter = new BufferedWriter(new FileWriter(outputCsv))
+        ) {
+            // Write CSV header
+            csvWriter.write("FIELD1,FIELD2,FIELD3\n"); // Replace with your fields
 
-        // Step 3: Write CSV header (optional)
-        FileWriter csvWriter = new FileWriter(outputCsvPath);
-        csvWriter.write("Field1,Field2,Field3\n"); // Replace with your field names
+            ByteBuffer buffer = ByteBuffer.allocate(/* record length */);
+            while (channel.read(buffer) != -1) {
+                buffer.flip();
+                byte[] recordBytes = new byte[buffer.remaining()];
+                buffer.get(recordBytes);
 
-        // Step 4: Process each record
-        AbstractLine line;
-        while ((line = reader.read()) != null) {
-            String field1 = line.getFieldValue("FIELD-1").asString();
-            String field2 = line.getFieldValue("FIELD-2").asString();
-            String field3 = line.getFieldValue("FIELD-3").asString();
+                // Convert mainframe bytes to Java object
+                Object jaxbObject = wrapper.unmarshal(recordBytes);
 
-            csvWriter.write(String.format("%s,%s,%s\n", field1, field2, field3));
+                // Extract fields (example)
+                String field1 = /* get value from jaxbObject */;
+                String field2 = /* get value from jaxbObject */;
+                csvWriter.write(field1 + "," + field2 + "\n");
+
+                buffer.clear();
+            }
         }
-
-        // Step 5: Cleanup
-        reader.close();
-        csvWriter.close();
-        System.out.println("CSV generated: " + outputCsvPath);
     }
 }
+```
+
+---
+
+### Approach 2: Manual Parsing (For Simple Cases)
+If the copybook is straightforward (fixed-width, no COMP-3 fields), you can parse the file manually:
+
+#### Step 1: Parse the Copybook
+Extract field positions and lengths from the copybook. For example:
+```plaintext
+01 CUSTOMER-RECORD.
+   05 CUSTOMER-ID    PIC X(10).
+   05 CUSTOMER-NAME  PIC X(30).
+   05 CUSTOMER-BAL   PIC 9(5)V99.
+```
+
+#### Step 2: Read Bytes and Convert to CSV
+```java
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
+
+public class MainframeToCsvManual {
+
+    public static void main(String[] args) throws Exception {
+        String inputFile = "path/to/mainframe/file";
+        String outputCsv = "path/to/output.csv";
+
+        try (
+            BufferedInputStream bis = new BufferedInputStream(new FileInputStream(inputFile));
+            FileWriter csvWriter = new FileWriter(outputCsv)
+        ) {
+            csvWriter.write("CUSTOMER_ID,CUSTOMER_NAME,CUSTOMER_BAL\n");
+
+            byte[] record = new byte[47]; // Total record length (10 + 30 + 7)
+            while (bis.read(record) != -1) {
+                // Convert EBCDIC to ASCII (use a library like JTOpen if needed)
+                String customerId = new String(record, 0, 10, StandardCharsets.ISO_8859_1);
+                String customerName = new String(record, 10, 30, StandardCharsets.ISO_8859_1);
+                String customerBal = new String(record, 40, 7, StandardCharsets.ISO_8859_1);
+
+                csvWriter.write(customerId.trim() + "," + customerName.trim() + "," + customerBal + "\n");
+            }
+        }
+    }
+}
+```
+
+---
+
+### Key Notes:
+1. **Character Encoding**: Mainframe files often use EBCDIC encoding. Use a library like `JTOpen` or `IBM JZOS` for EBCDIC-to-ASCII conversion.
+2. **Complex Fields**: For packed decimals (COMP-3), use `java.math.BigDecimal` or a library like `JRecord`.
+3. **Performance**: For large files, use buffered I/O (e.g., `BufferedInputStream`).
+
+Let me know if you need help with EBCDIC conversion or handling COMP-3 fields!
