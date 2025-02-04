@@ -1,117 +1,56 @@
-To check the status of a mainframe job using `FTPSClient` in Java, you can switch to JES mode, retrieve the job listing, and parse the job status. Here's a step-by-step approach with code:
+import net.sf.JRecord.JRecordInterface1;
+import net.sf.JRecord.Common.Constants;
+import net.sf.JRecord.Details.AbstractLine;
+import net.sf.JRecord.IO.AbstractLineReader;
+import net.sf.JRecord.IO.AbstractLineWriter;
+import net.sf.JRecord.IO.CobolIoProvider;
+import net.sf.JRecord.Numeric.Convert;
+import net.sf.JRecord.def.IO.builders.ICobolIOBuilder;
 
-### Approach
-1. **Connect and Log In**: Establish an FTPS connection to the mainframe.
-2. **Switch to JES Mode**: Use the `SITE FILE=JES` command to access job information.
-3. **Retrieve Job List**: Fetch the list of jobs from the JES spool.
-4. **Parse Job Status**: Extract the status of the specific job ID from the listing.
-
-### Solution Code
-```java
-import org.apache.commons.net.ftp.FTPReply;
-import org.apache.commons.net.ftp.FTPSClient;
-import java.io.BufferedReader;
+import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 
-public class JobStatusChecker {
+public class MainframeToCsv {
 
-    public static void main(String[] args) {
-        String host = "your.mainframe.host";
-        int port = 21; // Use 990 for implicit FTPS
-        String username = "username";
-        String password = "password";
-        String jobId = "J0B15232"; // The job ID to check
+    public static void main(String[] args) throws IOException {
+        // Paths to the input file, copybook, and output CSV file
+        String inputFilePath = "path/to/your/mainframe/file";
+        String copybookPath = "path/to/your/copybook.cbl";
+        String outputCsvPath = "path/to/output.csv";
 
-        FTPSClient ftps = new FTPSClient(true); // true for implicit FTPS
+        // Define the Cobol IO Builder
+        ICobolIOBuilder ioBuilder = JRecordInterface1.COBOL
+                .newIOBuilder(copybookPath)
+                .setFileOrganization(Constants.IO_FIXED_LENGTH)
+                .setFont("CP037") // EBCDIC encoding
+                .setDialect(Convert.FMT_MAINFRAME);
 
-        try {
-            // Connect and login
-            ftps.connect(host, port);
-            if (!FTPReply.isPositiveCompletion(ftps.getReplyCode())) {
-                System.err.println("Connection failed: " + ftps.getReplyString());
-                return;
-            }
+        // Create a reader for the input file
+        AbstractLineReader reader = CobolIoProvider.getInstance().getLineReader(ioBuilder);
+        reader.open(inputFilePath);
 
-            if (!ftps.login(username, password)) {
-                System.err.println("Login failed: " + ftps.getReplyString());
-                return;
-            }
+        // Create a writer for the CSV file
+        FileWriter csvWriter = new FileWriter(outputCsvPath);
 
-            // Set protection buffer size and data channel protection
-            ftps.execPBSZ(0);
-            ftps.execPROT("P");
+        // Write CSV header (optional)
+        csvWriter.write("Field1,Field2,Field3\n"); // Replace with your field names
 
-            // Switch to JES mode
-            if (!ftps.sendSiteCommand("FILE=JES")) {
-                System.err.println("Failed to switch to JES mode: " + ftps.getReplyString());
-                return;
-            }
+        // Read and process each line
+        AbstractLine line;
+        while ((line = reader.read()) != null) {
+            // Extract fields from the line
+            String field1 = line.getFieldValue("FIELD-1").asString();
+            String field2 = line.getFieldValue("FIELD-2").asString();
+            String field3 = line.getFieldValue("FIELD-3").asString();
 
-            // Retrieve job listing
-            ftps.enterLocalPassiveMode();
-            InputStream is = ftps.retrieveFileStream("");
-            if (is == null) {
-                System.err.println("Failed to retrieve jobs: " + ftps.getReplyString());
-                return;
-            }
-
-            // Parse job status
-            String status = null;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    line = line.trim();
-                    if (line.isEmpty() || line.startsWith("JOBNAME")) {
-                        continue; // Skip headers and empty lines
-                    }
-                    String[] parts = line.split("\\s+");
-                    if (parts.length >= 3 && parts[1].equalsIgnoreCase(jobId)) {
-                        status = parts[2];
-                        break;
-                    }
-                }
-            }
-
-            ftps.completePendingCommand(); // Complete the RETR command
-
-            // Output status
-            if (status != null) {
-                System.out.println("Job " + jobId + " status: " + status);
-                if ("OUTPUT".equalsIgnoreCase(status)) {
-                    System.out.println("Job completed successfully.");
-                } else {
-                    System.out.println("Job is in " + status + " state.");
-                }
-            } else {
-                System.out.println("Job " + jobId + " not found.");
-            }
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                if (ftps.isConnected()) {
-                    ftps.disconnect();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            // Write the fields to the CSV file
+            csvWriter.write(field1 + "," + field2 + "," + field3 + "\n");
         }
+
+        // Close resources
+        reader.close();
+        csvWriter.close();
+
+        System.out.println("CSV file created successfully at: " + outputCsvPath);
     }
 }
-```
-
-### Explanation
-1. **FTPS Connection**: The code uses implicit FTPS (port 990) by default. Adjust the port if your mainframe uses explicit FTPS (port 21).
-2. **JES Mode**: Switching to JES mode allows interaction with the job queue instead of the file system.
-3. **Job Listing**: The job list is retrieved as an input stream. Each line is parsed to find the job ID and its corresponding status.
-4. **Status Parsing**: The job status is determined by checking the third field in each line of the JES listing. Common statuses include `INPUT`, `ACTIVE`, and `OUTPUT`.
-
-### Notes
-- **JES Format**: The parsing logic assumes the job ID is the second field and the status is the third. Adjust the indices if your mainframe's JES listing format differs.
-- **Error Handling**: The example includes basic error handling. Enhance it based on your requirements (e.g., retries, logging).
-- **Security**: Ensure FTPS settings (e.g., certificate validation) match your mainframe's configuration.
-
-This approach allows you to check the job status programmatically using FTPS without terminal access or additional APIs.
