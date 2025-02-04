@@ -12,45 +12,40 @@ import java.io.IOException;
 public class MainframeToCsv {
 
     public static void main(String[] args) throws IOException {
-        // Paths to the input file, copybook, and output CSV file
-        String inputFilePath = "path/to/your/mainframe/file";
-        String copybookPath = "path/to/your/copybook.cbl";
+        String inputFilePath = "path/to/mainframe/file.dat";
+        String copybookPath = "path/to/copybook.cbl";
         String outputCsvPath = "path/to/output.csv";
 
-        // Define the Cobol IO Builder
+        // Step 1: Build the Cobol IO configuration
         ICobolIOBuilder ioBuilder = JRecordInterface1.COBOL
                 .newIOBuilder(copybookPath)
                 .setFileOrganization(Constants.IO_FIXED_LENGTH) // Fixed-length records
                 .setFont("CP037") // EBCDIC encoding
-                .setDialect(Convert.FMT_MAINFRAME); // Mainframe dialect
+                .setDialect(Convert.FMT_MAINFRAME) // Mainframe format
+                .setSplitCopybook(Constants.SPLIT_NONE); // Adjust if copybook has multiple layouts
 
-        // Create a reader for the input file
+        // Step 2: Create a line reader using the IO Builder
         CobolIoProvider ioProvider = CobolIoProvider.getInstance();
         AbstractLineReader reader = ioProvider.getLineReader(ioBuilder);
         reader.open(inputFilePath);
 
-        // Create a writer for the CSV file
+        // Step 3: Write CSV header (optional)
         FileWriter csvWriter = new FileWriter(outputCsvPath);
-
-        // Write CSV header (optional)
         csvWriter.write("Field1,Field2,Field3\n"); // Replace with your field names
 
-        // Read and process each line
+        // Step 4: Process each record
         AbstractLine line;
         while ((line = reader.read()) != null) {
-            // Extract fields from the line
             String field1 = line.getFieldValue("FIELD-1").asString();
             String field2 = line.getFieldValue("FIELD-2").asString();
             String field3 = line.getFieldValue("FIELD-3").asString();
 
-            // Write the fields to the CSV file
-            csvWriter.write(field1 + "," + field2 + "," + field3 + "\n");
+            csvWriter.write(String.format("%s,%s,%s\n", field1, field2, field3));
         }
 
-        // Close resources
+        // Step 5: Cleanup
         reader.close();
         csvWriter.close();
-
-        System.out.println("CSV file created successfully at: " + outputCsvPath);
+        System.out.println("CSV generated: " + outputCsvPath);
     }
 }
