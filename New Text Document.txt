@@ -1,35 +1,35 @@
 import java.io.*;
-import java.util.*;
 import net.sf.JRecord.*;
-import net.sf.JRecord.Common.*;
+import net.sf.JRecord.Common.Constants;
 import net.sf.JRecord.Details.*;
 import net.sf.JRecord.External.*;
-import net.sf.JRecord.External.CopybookLoader;
+import net.sf.JRecord.External.CobolCopybookLoader;
 import net.sf.JRecord.IO.*;
 import net.sf.JRecord.Numeric.Convert;
-import net.sf.cb2xml.def.Cb2xmlConstants;
-import net.sf.cb2xml.def.ICopybookJrUpd;
-import net.sf.cb2xml.jrecord.*;
-import net.sf.cb2xml.sablecc.parser.*;
 
 public class CobolConverter {
 
-    private final ICopybookJrUpd copybook;
-    private final String font;
+    private final LayoutDetail layout;
+    private final String encoding;
     private final int recordLength;
 
-    public CobolConverter(String copybookPath, String font, int recordLength) throws Exception {
-        this.font = font;
+    public CobolConverter(String copybookPath, String encoding, int recordLength) throws Exception {
+        this.encoding = encoding;
         this.recordLength = recordLength;
-        this.copybook = loadCopybook(copybookPath);
+        this.layout = loadCopybook(copybookPath);
     }
 
-    private ICopybookJrUpd loadCopybook(String copybookPath) throws Exception {
-        Cb2XmlWrapper wrapper = new Cb2XmlWrapper()
-                .setFile(copybookPath)
-                .setCobolLineFormat(Cb2xmlConstants.FREE_FORMAT)
-                .setFont(font);
-        return wrapper.asCobolCopybook();
+    private LayoutDetail loadCopybook(String copybookPath) throws Exception {
+        CobolCopybookLoader loader = new CobolCopybookLoader();
+        return loader.loadCopyBook(
+            copybookPath,
+            CopybookLoader.SPLIT_NONE,
+            0,
+            encoding,
+            Convert.FMT_MAINFRAME,
+            0,
+            null
+        );
     }
 
     public void convertToCsv(String dataFile, String csvFile, String fileOrganization) throws Exception {
@@ -46,42 +46,39 @@ public class CobolConverter {
     }
 
     private AbstractLineReader createReader(String dataFile, String fileOrganization) throws Exception {
-        int fileStructure = FileOrganizationConstants.IO_STANDARD_TEXT_FILE;
-        if ("fixed".equalsIgnoreCase(fileOrganization)) {
-            fileStructure = FileOrganizationConstants.IO_FIXED_LENGTH;
-        } else if ("variable".equalsIgnoreCase(fileOrganization)) {
-            fileStructure = FileOrganizationConstants.IO_VB;
+        int fileStructure = Constants.IO_STANDARD_TEXT_FILE;
+        if (fileOrganization.equalsIgnoreCase("fixed")) {
+            fileStructure = Constants.IO_FIXED_LENGTH;
+        } else if (fileOrganization.equalsIgnoreCase("variable")) {
+            fileStructure = Constants.IO_VB;
         }
 
-        return new LineReaderWrapper(
-                copybook.newMultiLayout(CopybookLoader.SPLIT_NONE)
-                        .asLayoutDetail()
-                        .getLayout(recordLength),
-                dataFile,
-                fileStructure,
-                font
-        );
+        return LineIOProvider.getInstance().getLineReader(
+            fileStructure,
+            layout.getDialect(),
+            encoding
+        ).open(dataFile, layout);
     }
 
     private void writeHeader(BufferedWriter writer) throws IOException {
         List<String> fieldNames = new ArrayList<>();
-        copybook.getRecord(0).getFields().forEach(field -> {
-            if (!field.isFieldRedefined()) {
-                fieldNames.add(field.getFieldName());
+        for (FieldDetail field : layout.getFields()) {
+            if (!field.isRedefined()) {
+                fieldNames.add(field.getName());
             }
-        });
+        }
         writer.write(String.join(",", fieldNames));
         writer.newLine();
     }
 
     private String convertLineToCsv(AbstractLine line) {
         List<String> values = new ArrayList<>();
-        copybook.getRecord(0).getFields().forEach(field -> {
-            if (!field.isFieldRedefined()) {
+        for (FieldDetail field : layout.getFields()) {
+            if (!field.isRedefined()) {
                 String value = line.getFieldValue(field).asString().trim();
                 values.add(escapeCsv(value));
             }
-        });
+        }
         return String.join(",", values);
     }
 
@@ -95,21 +92,21 @@ public class CobolConverter {
     public static void main(String[] args) {
         try {
             if (args.length < 6) {
-                System.out.println("Usage: java CobolConverter <copybook> <dataFile> <csvFile> <organization> <font> <recordLength>");
+                System.out.println("Usage: java CobolConverter <copybook> <dataFile> <csvFile> <organization> <encoding> <recordLength>");
                 System.out.println("Example: java CobolConverter copybook.cpy data.dat output.csv fixed CP037 500");
                 return;
             }
 
             CobolConverter converter = new CobolConverter(
-                    args[0],  // copybook path
-                    args[4],  // font (e.g., CP037 for EBCDIC)
-                    Integer.parseInt(args[5])  // record length
+                args[0],  // copybook path
+                args[4],  // encoding (e.g., CP037)
+                Integer.parseInt(args[5])  // record length
             );
 
             converter.convertToCsv(
-                    args[1],  // input data file
-                    args[2],  // output CSV file
-                    args[3]   // file organization (fixed/variable)
+                args[1],  // input data file
+                args[2],  // output CSV file
+                args[3]   // file organization
             );
 
             System.out.println("Conversion completed successfully!");
