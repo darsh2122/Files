@@ -1,177 +1,174 @@
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import org.w3c.dom.*;
+import javax.xml.parsers.*;
+import java.io.*;
 import java.util.*;
-import java.util.stream.Collectors;
 
-public class CobolToCsvDynamicConverter {
-
-    private List<RecordStructure> recordStructures = new ArrayList<>();
-    private Set<String> allFieldNames = new LinkedHashSet<>();
-
-    public void parseXml(File xmlFile) throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        DocumentBuilder builder = factory.newDocumentBuilder();
-        Document doc = builder.parse(xmlFile);
-
-        NodeList items = doc.getElementsByTagName("item");
-        for (int i = 0; i < items.getLength(); i++) {
-            Element item = (Element) items.item(i);
-            if (!item.getAttribute("level").equals("01")) continue;
-
-            String name = item.getAttribute("name");
-            int storageLength = Integer.parseInt(item.getAttribute("storage-length"));
-            List<Field> fields = new ArrayList<>();
-
-            // Recursively parse all child elements for fields
-            parseFields(item, fields, 0);
-
-            // Add to record structures and collect field names
-            recordStructures.add(new RecordStructure(name, storageLength, fields));
-            fields.forEach(f -> allFieldNames.add(f.name));
-        }
-    }
-
-    private void parseFields(Element parent, List<Field> fields, int parentStart) {
-        NodeList children = parent.getElementsByTagName("item");
-        for (int i = 0; i < children.getLength(); i++) {
-            Element child = (Element) children.item(i);
-            String level = child.getAttribute("level");
-            String picture = child.getAttribute("picture");
-
-            if (picture.isEmpty()) { // Group item
-                int groupStart = Integer.parseInt(child.getAttribute("position"));
-                parseFields(child, fields, parentStart + groupStart - 1);
-            } else { // Elementary item
-                int position = parentStart + Integer.parseInt(child.getAttribute("position")) - 1;
-                int length = parsePicture(picture);
-                String name = child.getAttribute("name");
-                boolean isNumeric = picture.startsWith("9");
-
-                fields.add(new Field(name, position, length, isNumeric));
-            }
-        }
-    }
-
-    private int parsePicture(String picture) {
-        String lengthStr = picture.substring(picture.indexOf('(') + 1, picture.indexOf(')'));
-        return Integer.parseInt(lengthStr);
-    }
-
-    public void convertToCsv(File inputFile, File outputFile) throws IOException {
-        List<String> lines = Files.readAllLines(inputFile.toPath(), StandardCharsets.UTF_8);
-        if (lines.isEmpty()) return;
-
-        List<String> csvLines = new ArrayList<>();
-        csvLines.add(String.join(",", allFieldNames)); // CSV header
-
-        // Process all lines
-        for (String line : lines) {
-            RecordStructure matchedStructure = findMatchingStructure(line);
-            if (matchedStructure == null) continue;
-
-            Map<String, String> fieldValues = parseLine(line, matchedStructure.fields);
-            csvLines.add(generateCsvLine(fieldValues));
-        }
-
-        Files.write(outputFile.toPath(), csvLines, StandardCharsets.UTF_8);
-    }
-
-    private RecordStructure findMatchingStructure(String line) {
-        for (RecordStructure structure : recordStructures) {
-            if (line.length() != structure.storageLength) continue;
-
-            boolean valid = true;
-            for (Field field : structure.fields) {
-                if (!validateField(line, field)) {
-                    valid = false;
-                    break;
-                }
-            }
-
-            if (valid) return structure;
-        }
-        return null;
-    }
-
-    private boolean validateField(String line, Field field) {
-        String value = extractValue(line, field);
-        if (field.isNumeric && !value.matches("^\\s*[-+]?\\d+\\s*$")) {
-            return false;
-        }
-        return true;
-    }
-
-    private Map<String, String> parseLine(String line, List<Field> fields) {
-        Map<String, String> values = new HashMap<>();
-        for (Field field : fields) {
-            values.put(field.name, extractValue(line, field).trim());
-        }
-        return values;
-    }
-
-    private String extractValue(String line, Field field) {
-        int start = field.position - 1;
-        int end = Math.min(start + field.length, line.length());
-        return start < line.length() ? line.substring(start, end) : "";
-    }
-
-    private String generateCsvLine(Map<String, String> fieldValues) {
-        return allFieldNames.stream()
-                .map(name -> fieldValues.getOrDefault(name, ""))
-                .map(this::escapeCsv)
-                .collect(Collectors.joining(","));
-    }
-
-    private String escapeCsv(String value) {
-        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
-        }
-        return value;
-    }
-
-    // Helper classes
-    private static class RecordStructure {
+public class CobolConverter {
+    private static class FieldDefinition {
+        int level;
         String name;
-        int storageLength;
-        List<Field> fields;
-
-        RecordStructure(String name, int storageLength, List<Field> fields) {
-            this.name = name;
-            this.storageLength = storageLength;
-            this.fields = fields;
-        }
-    }
-
-    private static class Field {
-        String name;
-        int position;
+        String type;
         int length;
-        boolean isNumeric;
+        int occurs = 1;
+        String recordId;
+        List<FieldDefinition> children = new ArrayList<>();
+        FieldDefinition parent;
 
-        Field(String name, int position, int length, boolean isNumeric) {
-            this.name = name;
-            this.position = position;
-            this.length = length;
-            this.isNumeric = isNumeric;
+        public FieldDefinition(Element element, FieldDefinition parent) {
+            this.level = Integer.parseInt(element.getAttribute("level"));
+            this.name = element.getAttribute("name");
+            this.type = element.getAttribute("type");
+            this.recordId = element.getAttribute("record-id");
+            this.parent = parent;
+            
+            if (element.hasAttribute("length")) {
+                this.length = Integer.parseInt(element.getAttribute("length"));
+            }
+            if (element.hasAttribute("occurs")) {
+                this.occurs = Integer.parseInt(element.getAttribute("occurs"));
+            }
         }
     }
 
     public static void main(String[] args) {
-        CobolToCsvDynamicConverter converter = new CobolToCsvDynamicConverter();
         try {
-            converter.parseXml(new File("copybook.xml"));
-            converter.convertToCsv(new File("input.txt"), new File("output.csv"));
-            System.out.println("Conversion completed successfully.");
+            File xmlConfig = new File("copybook.xml");
+            File inputFile = new File("data.txt");
+            File outputFile = new File("output.csv");
+            
+            Map<String, FieldDefinition> recordDefinitions = parseXmlConfig(xmlConfig);
+            processFile(inputFile, outputFile, recordDefinitions);
+            
         } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
-            System.err.println("Error during conversion: " + e.getMessage());
         }
+    }
+
+    private static Map<String, FieldDefinition> parseXmlConfig(File xmlFile) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        Document doc = factory.newDocumentBuilder().parse(xmlFile);
+        NodeList items = doc.getElementsByTagName("item");
+        
+        Map<String, FieldDefinition> records = new HashMap<>();
+        Deque<FieldDefinition> stack = new ArrayDeque<>();
+        
+        for (int i = 0; i < items.getLength(); i++) {
+            Element element = (Element) items.item(i);
+            FieldDefinition current = new FieldDefinition(element, stack.peek());
+            
+            if (current.level == 1) {
+                records.put(current.recordId, current);
+                stack.clear();
+                stack.push(current);
+            } else {
+                while (!stack.isEmpty() && stack.peek().level >= current.level) {
+                    stack.pop();
+                }
+                if (!stack.isEmpty()) {
+                    stack.peek().children.add(current);
+                }
+                stack.push(current);
+            }
+        }
+        return records;
+    }
+
+    private static void processFile(File input, File output, 
+                                  Map<String, FieldDefinition> records) throws IOException {
+        try (BufferedReader reader = new BufferedReader(new FileReader(input));
+             BufferedWriter writer = new BufferedWriter(new FileWriter(output))) {
+            
+            // Write CSV header
+            writer.write(generateHeader(records) + "\n");
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                try {
+                    String recordId = line.substring(0, 2); // Assuming record-id is first 2 chars
+                    FieldDefinition record = records.get(recordId);
+                    
+                    if (record == null) {
+                        throw new Exception("Unknown record type: " + recordId);
+                    }
+                    
+                    String csvLine = parseRecord(line.substring(2), record);
+                    writer.write(recordId + "," + csvLine + "\n");
+                    
+                } catch (Exception e) {
+                    System.err.println("Error processing line: " + e.getMessage());
+                    // Handle error (e.g., write to error log)
+                }
+            }
+        }
+    }
+
+    private static String generateHeader(Map<String, FieldDefinition> records) {
+        StringBuilder header = new StringBuilder("RECORD-TYPE,");
+        for (FieldDefinition record : records.values()) {
+            generateHeaderForRecord(header, record, "");
+        }
+        return header.toString().replaceAll(",$", "");
+    }
+
+    private static void generateHeaderForRecord(StringBuilder header, 
+                                              FieldDefinition def, String prefix) {
+        for (FieldDefinition child : def.children) {
+            if (child.children.isEmpty()) {
+                header.append(prefix).append(child.name).append(",");
+            } else {
+                for (int i = 0; i < child.occurs; i++) {
+                    generateHeaderForRecord(header, child, 
+                                      prefix + child.name + "_" + i + "_");
+                }
+            }
+        }
+    }
+
+    private static String parseRecord(String data, FieldDefinition def) throws Exception {
+        return parseGroup(data, def, 0).toString();
+    }
+
+    private static StringBuilder parseGroup(String data, FieldDefinition group, int position) 
+            throws Exception {
+        StringBuilder output = new StringBuilder();
+        int occurs = group.occurs;
+        int groupLength = calculateLength(group.children) * occurs;
+
+        for (int i = 0; i < occurs; i++) {
+            int currentPos = position + (i * (groupLength / occurs));
+            for (FieldDefinition child : group.children) {
+                if (!child.children.isEmpty()) {
+                    output.append(parseGroup(data, child, currentPos));
+                } else {
+                    if (currentPos + child.length > data.length()) {
+                        throw new Exception("Data overflow in field: " + child.name);
+                    }
+                    String value = data.substring(currentPos, currentPos + child.length).trim();
+                    output.append(escapeCsv(value)).append(",");
+                    currentPos += child.length;
+                }
+            }
+        }
+        return output;
+    }
+
+    private static int calculateLength(List<FieldDefinition> fields) {
+        int length = 0;
+        for (FieldDefinition field : fields) {
+            if (field.children.isEmpty()) {
+                length += field.length;
+            } else {
+                length += calculateLength(field.children) * field.occurs;
+            }
+        }
+        return length;
+    }
+
+    private static String escapeCsv(String value) {
+        if (value.contains(",") || value.contains("\"")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 }
