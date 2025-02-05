@@ -1,4 +1,5 @@
 import java.io.*;
+import java.util.*;
 import net.sf.JRecord.*;
 import net.sf.JRecord.Common.Constants;
 import net.sf.JRecord.Details.*;
@@ -11,25 +12,26 @@ public class CobolConverter {
 
     private final LayoutDetail layout;
     private final String encoding;
-    private final int recordLength;
 
     public CobolConverter(String copybookPath, String encoding, int recordLength) throws Exception {
         this.encoding = encoding;
-        this.recordLength = recordLength;
-        this.layout = loadCopybook(copybookPath);
+        this.layout = loadCopybook(copybookPath, recordLength);
     }
 
-    private LayoutDetail loadCopybook(String copybookPath) throws Exception {
+    private LayoutDetail loadCopybook(String copybookPath, int recordLength) throws Exception {
         CobolCopybookLoader loader = new CobolCopybookLoader();
-        return loader.loadCopyBook(
-            copybookPath,
-            CopybookLoader.SPLIT_NONE,
-            0,
-            encoding,
-            Convert.FMT_MAINFRAME,
-            0,
+        ExternalRecord externalRecord = loader.loadCopyBook(
+            new File(copybookPath), 
+            CopybookLoader.SPLIT_NONE, 
+            0, 
+            encoding, 
+            Convert.FMT_MAINFRAME, 
+            0, 
             null
         );
+
+        return externalRecord.asLayoutDetail()
+                .setRecordLength(recordLength);
     }
 
     public void convertToCsv(String dataFile, String csvFile, String fileOrganization) throws Exception {
@@ -47,23 +49,21 @@ public class CobolConverter {
 
     private AbstractLineReader createReader(String dataFile, String fileOrganization) throws Exception {
         int fileStructure = Constants.IO_STANDARD_TEXT_FILE;
-        if (fileOrganization.equalsIgnoreCase("fixed")) {
+        if ("fixed".equalsIgnoreCase(fileOrganization)) {
             fileStructure = Constants.IO_FIXED_LENGTH;
-        } else if (fileOrganization.equalsIgnoreCase("variable")) {
+        } else if ("variable".equalsIgnoreCase(fileOrganization)) {
             fileStructure = Constants.IO_VB;
         }
 
-        return LineIOProvider.getInstance().getLineReader(
-            fileStructure,
-            layout.getDialect(),
-            encoding
-        ).open(dataFile, layout);
+        return LineIOProvider.getInstance().getLineReader(fileStructure)
+                .open(dataFile, layout);
     }
 
     private void writeHeader(BufferedWriter writer) throws IOException {
         List<String> fieldNames = new ArrayList<>();
         for (FieldDetail field : layout.getFields()) {
-            if (!field.isRedefined()) {
+            // Skip group fields and only include leaf nodes
+            if (field.isField() && field.getParent() != null) {
                 fieldNames.add(field.getName());
             }
         }
@@ -74,7 +74,7 @@ public class CobolConverter {
     private String convertLineToCsv(AbstractLine line) {
         List<String> values = new ArrayList<>();
         for (FieldDetail field : layout.getFields()) {
-            if (!field.isRedefined()) {
+            if (field.isField() && field.getParent() != null) {
                 String value = line.getFieldValue(field).asString().trim();
                 values.add(escapeCsv(value));
             }
