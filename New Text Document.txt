@@ -1,250 +1,166 @@
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.w3c.dom.*;
-import javax.xml.parsers.*;
-import java.io.*;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
+/**
+ * Generates CSV header based on record definitions
+ */
+private static String generateHeader(Map<String, FieldDefinition> records, boolean isVariable) {
+    long start = System.currentTimeMillis();
+    try {
+        Set<String> headerSet = new LinkedHashSet<>();
+        StringBuilder header = new StringBuilder();
 
-public class CobolConverter {
-    private static final Logger logger = LoggerFactory.getLogger(CobolConverter.class);
-    private static final int BUFFER_SIZE = 8192 * 4;
-    private static final AtomicLong processedRecords = new AtomicLong(0);
-    private static final AtomicLong failedRecords = new AtomicLong(0);
-
-    /**
-     * Configuration class holding user parameters
-     */
-    private static class Config {
-        boolean isVariableLength;
-        int recIdStart = -1;
-        int recIdLength = -1;
-        String xmlPath;
-        String inputPath;
-        String outputPath;
-    }
-
-    /**
-     * Field definition structure with COBOL metadata
-     */
-    private static class FieldDefinition {
-        int level;
-        String name;
-        String type;
-        int length;
-        int occurs = 1;
-        String recordId;
-        List<FieldDefinition> children = new ArrayList<>();
-        FieldDefinition parent;
-
-        public FieldDefinition(Element element, FieldDefinition parent) {
-            this.level = Integer.parseInt(element.getAttribute("level"));
-            this.name = element.getAttribute("name");
-            this.type = element.getAttribute("type");
-            this.recordId = element.getAttribute("record-id");
-            this.parent = parent;
-
-            if (element.hasAttribute("length")) {
-                this.length = Integer.parseInt(element.getAttribute("length"));
-            }
-            if (element.hasAttribute("occurs")) {
-                this.occurs = Integer.parseInt(element.getAttribute("occurs"));
-            }
+        if (isVariable) {
+            header.append("RECORD-TYPE,");
         }
-    }
 
-    public static void main(String[] args) {
-        long startTime = System.currentTimeMillis();
-        try {
-            Config config = parseArguments(args);
-            Map<String, FieldDefinition> records = parseXmlConfig(new File(config.xmlPath));
-            processFile(config, records);
-            
-            logger.info("Processing completed successfully");
-            logger.info("Processed {} records in {} ms", 
-                processedRecords.get(), System.currentTimeMillis() - startTime);
-            logger.info("Successfully processed: {}", processedRecords.get());
-            logger.info("Failed records: {}", failedRecords.get());
-            
-        } catch (Exception e) {
-            logger.error("Fatal error occurred: {}", e.getMessage(), e);
-            System.exit(1);
+        for (FieldDefinition record : records.values()) {
+            generateRecordHeader(headerSet, record, "");
         }
-    }
 
-    /**
-     * Parse command line arguments with validation
-     */
-    private static Config parseArguments(String[] args) throws IllegalArgumentException {
-        Config config = new Config();
-        Map<String, String> argMap = new HashMap<>();
+        headerSet.forEach(field -> header.append(field).append(","));
+        header.deleteCharAt(header.length() - 1); // Remove trailing comma
         
-        try {
-            for (int i = 0; i < args.length; i += 2) {
-                argMap.put(args[i], args[i + 1]);
-            }
+        logger.debug("Generated header with {} columns in {} ms", 
+                    headerSet.size(), System.currentTimeMillis() - start);
+        return header.toString();
+    } catch (Exception e) {
+        logger.error("Header generation failed: {}", e.getMessage(), e);
+        throw new RuntimeException("Header generation failed", e);
+    }
+}
 
-            // Validate and parse arguments
-            config.isVariableLength = argMap.containsKey("-type") && 
-                argMap.get("-type").equalsIgnoreCase("variable");
-            
-            if (config.isVariableLength) {
-                if (!argMap.containsKey("-recid")) {
-                    throw new IllegalArgumentException("Missing -recid parameter for variable files");
+/**
+ * Recursively generates header fields for a record definition
+ */
+private static void generateRecordHeader(Set<String> headerSet, 
+                                       FieldDefinition def, 
+                                       String prefix) {
+    for (FieldDefinition child : def.children) {
+        if (child.children.isEmpty()) {
+            headerSet.add(prefix + child.name);
+        } else {
+            for (int i = 0; i < child.occurs; i++) {
+                String newPrefix = String.format("%s%s_%d_", 
+                        prefix, child.name, i);
+                generateRecordHeader(headerSet, child, newPrefix);
+            }
+        }
+    }
+}
+
+/**
+ * Parses a complete record into CSV format
+ */
+private static String parseRecord(String data, FieldDefinition recordDef) {
+    long start = System.currentTimeMillis();
+    try {
+        StringBuilder output = new StringBuilder();
+        parseGroup(data, recordDef.children, 0, output);
+        
+        // Remove trailing comma
+        if (output.length() > 0 && output.charAt(output.length() - 1) == ',') {
+            output.setLength(output.length() - 1);
+        }
+        
+        logger.debug("Parsed record in {} ms", System.currentTimeMillis() - start);
+        return output.toString();
+    } catch (Exception e) {
+        logger.error("Record parsing failed: {}", e.getMessage());
+        throw new RuntimeException("Record parsing failed", e);
+    }
+}
+
+/**
+ * Recursively parses a group of fields with occurs handling
+ */
+private static int parseGroup(String data, List<FieldDefinition> fields, 
+                            int startPos, StringBuilder output) {
+    int currentPos = startPos;
+    for (FieldDefinition field : fields) {
+        if (field.children.isEmpty()) {
+            // Handle primitive field
+            for (int i = 0; i < field.occurs; i++) {
+                if (currentPos + field.length > data.length()) {
+                    throw new IllegalArgumentException(
+                        String.format("Field %s exceeds data length (position %d, length %d)", 
+                        field.name, currentPos, field.length));
                 }
-                String[] recIdParts = argMap.get("-recid").split(":");
-                config.recIdStart = Integer.parseInt(recIdParts[0]);
-                config.recIdLength = Integer.parseInt(recIdParts[1]);
+                
+                String value = data.substring(currentPos, currentPos + field.length).trim();
+                output.append(escapeCsv(value)).append(",");
+                currentPos += field.length;
+                
+                logger.trace("Parsed field {}[{}] at position {}-{}: {}", 
+                           field.name, i, currentPos - field.length, 
+                           currentPos, value);
             }
-
-            config.xmlPath = argMap.get("-xml");
-            config.inputPath = argMap.get("-in");
-            config.outputPath = argMap.get("-out");
-
-            // Validate required parameters
-            if (config.xmlPath == null || config.inputPath == null || config.outputPath == null) {
-                throw new IllegalArgumentException("Missing required parameters");
-            }
-
-            return config;
-
-        } catch (Exception e) {
-            printUsage();
-            throw new IllegalArgumentException("Invalid arguments: " + e.getMessage());
-        }
-    }
-
-    private static void printUsage() {
-        System.out.println("Usage:");
-        System.out.println("  Fixed length files:");
-        System.out.println("    java CobolConverter -type fixed -xml <copybook.xml> -in <input.txt> -out <output.csv>");
-        System.out.println("  Variable length files:");
-        System.out.println("    java CobolConverter -type variable -recid <start:length> -xml <copybook.xml> -in <input.txt> -out <output.csv>");
-    }
-
-    /**
-     * Optimized XML parsing with DOM and hierarchical structure building
-     */
-    private static Map<String, FieldDefinition> parseXmlConfig(File xmlFile) throws Exception {
-        long start = System.currentTimeMillis();
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        Document doc = factory.newDocumentBuilder().parse(xmlFile);
-        NodeList items = doc.getElementsByTagName("item");
-        
-        Map<String, FieldDefinition> records = new HashMap<>();
-        Deque<FieldDefinition> stack = new ArrayDeque<>();
-        
-        for (int i = 0; i < items.getLength(); i++) {
-            Element element = (Element) items.item(i);
-            FieldDefinition current = new FieldDefinition(element, stack.peek());
-
-            if (current.level == 1) {
-                records.put(current.recordId, current);
-                stack.clear();
-                stack.push(current);
-            } else {
-                while (!stack.isEmpty() && stack.peek().level >= current.level) {
-                    stack.pop();
-                }
-                if (!stack.isEmpty()) {
-                    stack.peek().children.add(current);
-                }
-                stack.push(current);
+        } else {
+            // Handle group field
+            int groupLength = calculateGroupLength(field);
+            for (int i = 0; i < field.occurs; i++) {
+                int groupStart = currentPos + (i * groupLength);
+                logger.debug("Processing group {}[{}] at position {}", 
+                           field.name, i, groupStart);
+                           
+                currentPos = parseGroup(data, field.children, groupStart, output);
             }
         }
-        
-        logger.debug("Parsed XML config in {} ms", System.currentTimeMillis() - start);
-        return records;
     }
+    return currentPos;
+}
 
-    /**
-     * Optimized file processing with buffered I/O and memory management
-     */
-    private static void processFile(Config config, Map<String, FieldDefinition> records) throws IOException {
-        long start = System.currentTimeMillis();
-        FieldDefinition fixedRecord = !config.isVariableLength ? 
-            records.values().iterator().next() : null;
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(config.inputPath), BUFFER_SIZE);
-             BufferedWriter writer = new BufferedWriter(new FileWriter(config.outputPath), BUFFER_SIZE)) {
-
-            // Write CSV header
-            writer.write(generateHeader(records, config.isVariableLength));
-            
-            char[] buffer = new char[BUFFER_SIZE];
-            StringBuilder lineBuilder = new StringBuilder();
-            int charsRead;
-
-            while ((charsRead = reader.read(buffer)) != -1) {
-                lineBuilder.append(buffer, 0, charsRead);
-                processBuffer(lineBuilder, writer, records, config, fixedRecord);
-            }
-            // Process remaining characters
-            if (lineBuilder.length() > 0) {
-                processLines(lineBuilder.toString(), writer, records, config, fixedRecord);
-            }
+/**
+ * Calculates total length of a group including all occurs
+ */
+private static int calculateGroupLength(FieldDefinition group) {
+    int length = 0;
+    for (FieldDefinition child : group.children) {
+        if (child.children.isEmpty()) {
+            length += child.length * child.occurs;
+        } else {
+            length += calculateGroupLength(child) * child.occurs;
         }
-        
-        logger.info("File processing completed in {} ms", System.currentTimeMillis() - start);
     }
+    logger.trace("Calculated group {} length: {}", group.name, length);
+    return length;
+}
 
-    /**
-     * Efficient buffer processing to handle line breaks
-     */
-    private static void processBuffer(StringBuilder builder, BufferedWriter writer,
-                                    Map<String, FieldDefinition> records, Config config,
-                                    FieldDefinition fixedRecord) throws IOException {
-        int pos;
-        while ((pos = indexOf(builder, '\n')) != -1) {
-            String line = builder.substring(0, pos).trim();
-            if (line.length() > 0) {
+/**
+ * Processes remaining lines in buffer with error handling
+ */
+private static void processLines(String lines, BufferedWriter writer,
+                               Map<String, FieldDefinition> records, 
+                               Config config, 
+                               FieldDefinition fixedRecord) {
+    String[] lineArray = lines.split("\n");
+    for (String line : lineArray) {
+        if (!line.trim().isEmpty()) {
+            try {
                 processLine(line, writer, records, config, fixedRecord);
+            } catch (Exception e) {
+                failedRecords.incrementAndGet();
+                logger.error("Error processing line: {}", line, e);
             }
-            builder.delete(0, pos + 1);
         }
     }
+}
 
-    private static int indexOf(StringBuilder builder, char c) {
-        for (int i = 0; i < builder.length(); i++) {
-            if (builder.charAt(i) == c) return i;
-        }
-        return -1;
+/**
+ * CSV escaping with optimized performance
+ */
+private static String escapeCsv(String value) {
+    if (value == null || value.isEmpty()) return "";
+    
+    boolean needsQuotes = value.contains(",") || value.contains("\"") || 
+                        value.contains("\n") || value.contains("\r");
+                        
+    if (!needsQuotes) return value;
+    
+    // Optimized replacement to avoid regex overhead
+    StringBuilder sb = new StringBuilder(value.length() + 2);
+    sb.append('"');
+    for (char c : value.toCharArray()) {
+        if (c == '"') sb.append('"');
+        sb.append(c);
     }
-
-    /**
-     * Core line processing logic with error handling
-     */
-    private static void processLine(String line, BufferedWriter writer,
-                                  Map<String, FieldDefinition> records, Config config,
-                                  FieldDefinition fixedRecord) throws IOException {
-        try {
-            String recordId = config.isVariableLength ?
-                line.substring(config.recIdStart, config.recIdStart + config.recIdLength) :
-                fixedRecord.recordId;
-            
-            FieldDefinition record = config.isVariableLength ? 
-                records.get(recordId) : fixedRecord;
-
-            if (record == null) {
-                throw new IllegalArgumentException("Unknown record type: " + recordId);
-            }
-
-            String data = config.isVariableLength ?
-                line.substring(config.recIdStart + config.recIdLength) :
-                line;
-
-            String csvLine = parseRecord(data, record);
-            writer.write((config.isVariableLength ? recordId + "," : "") + csvLine + "\n");
-            processedRecords.incrementAndGet();
-
-        } catch (Exception e) {
-            failedRecords.incrementAndGet();
-            logger.error("Error processing line: {} | Reason: {}", 
-                line, e.getMessage(), e);
-        }
-    }
-
-    // Remaining methods (generateHeader, parseRecord, parseGroup, etc.) 
-    // would follow similar patterns with optimized string handling
-    // and additional logging as shown above...
+    sb.append('"');
+    return sb.toString();
 }
