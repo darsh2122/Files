@@ -1,166 +1,89 @@
-/**
- * Generates CSV header based on record definitions
- */
-private static String generateHeader(Map<String, FieldDefinition> records, boolean isVariable) {
-    long start = System.currentTimeMillis();
-    try {
-        Set<String> headerSet = new LinkedHashSet<>();
-        StringBuilder header = new StringBuilder();
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.util.ArrayList;
+import java.util.List;
 
-        if (isVariable) {
-            header.append("RECORD-TYPE,");
+import net.sf.JRecord.Common.Constants;
+import net.sf.JRecord.Details.AbstractLine;
+import net.sf.JRecord.Details.LayoutDetail;
+import net.sf.JRecord.External.CopybookLoader;
+import net.sf.JRecord.External.ICopybookDialects;
+import net.sf.JRecord.JRecordInterface1;
+import net.sf.JRecord.IO.AbstractLineReader;
+
+public class CobolToCsvConverter {
+
+    /**
+     * Usage: java CobolToCsvConverter <copybook file> <data file> <csv output>
+     */
+    public static void main(String[] args) {
+        if (args.length < 3) {
+            System.out.println("Usage: java CobolToCsvConverter <copybook file> <data file> <csv output>");
+            System.exit(1);
         }
+        String copybookFile = args[0];
+        String dataFile = args[1];
+        String csvOutputFile = args[2];
 
-        for (FieldDefinition record : records.values()) {
-            generateRecordHeader(headerSet, record, "");
-        }
+        try {
+            // Create a COBOL IO Builder using the new builder API.
+            // Note: Replace or adjust the options below to suit your copybook and file:
+            var ioBldr = JRecordInterface1.COBOL.newIOBuilder(copybookFile)
+                    .setDialect(ICopybookDialects.FMT_MAINFRAME)
+                    .setSplitCopybook(CopybookLoader.SPLIT_NONE)
+                    // Set the file organization:
+                    // Use Constants.IO_FIXED_LENGTH for fixed-length files,
+                    // or Constants.IO_VB for variable block (Mainframe VB) files.
+                    .setFileOrganization(Constants.IO_FIXED_LENGTH)
+                    .setFont("cp037"); // Adjust character set as needed
 
-        headerSet.forEach(field -> header.append(field).append(","));
-        header.deleteCharAt(header.length() - 1); // Remove trailing comma
-        
-        logger.debug("Generated header with {} columns in {} ms", 
-                    headerSet.size(), System.currentTimeMillis() - start);
-        return header.toString();
-    } catch (Exception e) {
-        logger.error("Header generation failed: {}", e.getMessage(), e);
-        throw new RuntimeException("Header generation failed", e);
-    }
-}
+            // Retrieve the layout details (record schema) derived from the copybook.
+            LayoutDetail layout = ioBldr.getLayout();
 
-/**
- * Recursively generates header fields for a record definition
- */
-private static void generateRecordHeader(Set<String> headerSet, 
-                                       FieldDefinition def, 
-                                       String prefix) {
-    for (FieldDefinition child : def.children) {
-        if (child.children.isEmpty()) {
-            headerSet.add(prefix + child.name);
-        } else {
-            for (int i = 0; i < child.occurs; i++) {
-                String newPrefix = String.format("%s%s_%d_", 
-                        prefix, child.name, i);
-                generateRecordHeader(headerSet, child, newPrefix);
-            }
-        }
-    }
-}
+            // Create the reader using the newIOBuilder API.
+            AbstractLineReader reader = ioBldr.newReader(dataFile);
 
-/**
- * Parses a complete record into CSV format
- */
-private static String parseRecord(String data, FieldDefinition recordDef) {
-    long start = System.currentTimeMillis();
-    try {
-        StringBuilder output = new StringBuilder();
-        parseGroup(data, recordDef.children, 0, output);
-        
-        // Remove trailing comma
-        if (output.length() > 0 && output.charAt(output.length() - 1) == ',') {
-            output.setLength(output.length() - 1);
-        }
-        
-        logger.debug("Parsed record in {} ms", System.currentTimeMillis() - start);
-        return output.toString();
-    } catch (Exception e) {
-        logger.error("Record parsing failed: {}", e.getMessage());
-        throw new RuntimeException("Record parsing failed", e);
-    }
-}
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvOutputFile))) {
 
-/**
- * Recursively parses a group of fields with occurs handling
- */
-private static int parseGroup(String data, List<FieldDefinition> fields, 
-                            int startPos, StringBuilder output) {
-    int currentPos = startPos;
-    for (FieldDefinition field : fields) {
-        if (field.children.isEmpty()) {
-            // Handle primitive field
-            for (int i = 0; i < field.occurs; i++) {
-                if (currentPos + field.length > data.length()) {
-                    throw new IllegalArgumentException(
-                        String.format("Field %s exceeds data length (position %d, length %d)", 
-                        field.name, currentPos, field.length));
+                // Build the CSV header dynamically from the copybook's field names.
+                List<String> headerFields = new ArrayList<>();
+                // We assume the copybook contains one record layout.
+                for (int i = 0; i < layout.getRecord(0).getFieldCount(); i++) {
+                    headerFields.add(layout.getRecord(0).getField(i).getName());
                 }
-                
-                String value = data.substring(currentPos, currentPos + field.length).trim();
-                output.append(escapeCsv(value)).append(",");
-                currentPos += field.length;
-                
-                logger.trace("Parsed field {}[{}] at position {}-{}: {}", 
-                           field.name, i, currentPos - field.length, 
-                           currentPos, value);
+                writer.write(String.join(",", headerFields));
+                writer.newLine();
+
+                // Read each record and write CSV rows.
+                AbstractLine line;
+                while ((line = reader.read()) != null) {
+                    List<String> csvFields = new ArrayList<>();
+                    for (int i = 0; i < layout.getRecord(0).getFieldCount(); i++) {
+                        String fieldValue = line.getFieldValue(0, i).asString();
+                        csvFields.add(escapeCsv(fieldValue));
+                    }
+                    writer.write(String.join(",", csvFields));
+                    writer.newLine();
+                }
             }
-        } else {
-            // Handle group field
-            int groupLength = calculateGroupLength(field);
-            for (int i = 0; i < field.occurs; i++) {
-                int groupStart = currentPos + (i * groupLength);
-                logger.debug("Processing group {}[{}] at position {}", 
-                           field.name, i, groupStart);
-                           
-                currentPos = parseGroup(data, field.children, groupStart, output);
-            }
+            reader.close();
+            System.out.println("Conversion complete. CSV file generated at: " + csvOutputFile);
+
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
-    return currentPos;
-}
 
-/**
- * Calculates total length of a group including all occurs
- */
-private static int calculateGroupLength(FieldDefinition group) {
-    int length = 0;
-    for (FieldDefinition child : group.children) {
-        if (child.children.isEmpty()) {
-            length += child.length * child.occurs;
-        } else {
-            length += calculateGroupLength(child) * child.occurs;
+    /**
+     * Escapes CSV fields by surrounding them with quotes if necessary and doubling internal quotes.
+     */
+    private static String escapeCsv(String value) {
+        if (value == null) {
+            return "";
         }
-    }
-    logger.trace("Calculated group {} length: {}", group.name, length);
-    return length;
-}
-
-/**
- * Processes remaining lines in buffer with error handling
- */
-private static void processLines(String lines, BufferedWriter writer,
-                               Map<String, FieldDefinition> records, 
-                               Config config, 
-                               FieldDefinition fixedRecord) {
-    String[] lineArray = lines.split("\n");
-    for (String line : lineArray) {
-        if (!line.trim().isEmpty()) {
-            try {
-                processLine(line, writer, records, config, fixedRecord);
-            } catch (Exception e) {
-                failedRecords.incrementAndGet();
-                logger.error("Error processing line: {}", line, e);
-            }
+        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
+            value = "\"" + value.replace("\"", "\"\"") + "\"";
         }
+        return value;
     }
-}
-
-/**
- * CSV escaping with optimized performance
- */
-private static String escapeCsv(String value) {
-    if (value == null || value.isEmpty()) return "";
-    
-    boolean needsQuotes = value.contains(",") || value.contains("\"") || 
-                        value.contains("\n") || value.contains("\r");
-                        
-    if (!needsQuotes) return value;
-    
-    // Optimized replacement to avoid regex overhead
-    StringBuilder sb = new StringBuilder(value.length() + 2);
-    sb.append('"');
-    for (char c : value.toCharArray()) {
-        if (c == '"') sb.append('"');
-        sb.append(c);
-    }
-    sb.append('"');
-    return sb.toString();
 }
