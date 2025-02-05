@@ -1,21 +1,19 @@
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
-
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
-public class CobolToCsvConverter {
+public class CobolToCsvDynamicConverter {
 
-    private RecordStructure headerStructure;
-    private List<RecordStructure> dataStructures = new ArrayList<>();
+    private List<RecordStructure> recordStructures = new ArrayList<>();
+    private Set<String> allFieldNames = new LinkedHashSet<>();
 
     public void parseXml(File xmlFile) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -25,195 +23,155 @@ public class CobolToCsvConverter {
         NodeList items = doc.getElementsByTagName("item");
         for (int i = 0; i < items.getLength(); i++) {
             Element item = (Element) items.item(i);
-            if (!item.getAttribute("level").equals("01")) {
-                continue;
-            }
+            if (!item.getAttribute("level").equals("01")) continue;
 
             String name = item.getAttribute("name");
             int storageLength = Integer.parseInt(item.getAttribute("storage-length"));
+            List<Field> fields = new ArrayList<>();
 
-            NodeList childItems = item.getElementsByTagName("item");
-            Element child05 = null;
-            for (int j = 0; j < childItems.getLength(); j++) {
-                Element child = (Element) childItems.item(j);
-                if (child.getAttribute("level").equals("05")) {
-                    child05 = child;
-                    break;
-                }
-            }
-            if (child05 == null) {
-                continue;
-            }
+            // Recursively parse all child elements for fields
+            parseFields(item, fields, 0);
 
-            if (name.equals("AAREC-HEADER")) {
-                List<Field> fields = parseFields(child05);
-                headerStructure = new RecordStructure(name, storageLength, fields, null, 0, 0);
-            } else {
-                String recName = child05.getAttribute("name");
-                int recNameStart = 0;
-                int recNameLength = 0;
-
-                NodeList fields = child05.getElementsByTagName("item");
-                for (int j = 0; j < fields.getLength(); j++) {
-                    Element field = (Element) fields.item(j);
-                    if (field.getAttribute("name").equals("REC-NAME")) {
-                        recNameStart = Integer.parseInt(field.getAttribute("position"));
-                        String picture = field.getAttribute("picture");
-                        recNameLength = parsePicture(picture);
-                        break;
-                    }
-                }
-
-                List<Field> structFields = parseFields(child05);
-                dataStructures.add(new RecordStructure(name, storageLength, structFields, recName, recNameStart, recNameLength));
-            }
+            // Add to record structures and collect field names
+            recordStructures.add(new RecordStructure(name, storageLength, fields));
+            fields.forEach(f -> allFieldNames.add(f.name));
         }
     }
 
-    private List<Field> parseFields(Element parent) {
-        List<Field> fields = new ArrayList<>();
-        NodeList fieldNodes = parent.getElementsByTagName("item");
-        for (int i = 0; i < fieldNodes.getLength(); i++) {
-            Element fieldElem = (Element) fieldNodes.item(i);
-            String level = fieldElem.getAttribute("level");
-            if (!level.equals("10")) {
-                continue;
+    private void parseFields(Element parent, List<Field> fields, int parentStart) {
+        NodeList children = parent.getElementsByTagName("item");
+        for (int i = 0; i < children.getLength(); i++) {
+            Element child = (Element) children.item(i);
+            String level = child.getAttribute("level");
+            String picture = child.getAttribute("picture");
+
+            if (picture.isEmpty()) { // Group item
+                int groupStart = Integer.parseInt(child.getAttribute("position"));
+                parseFields(child, fields, parentStart + groupStart - 1);
+            } else { // Elementary item
+                int position = parentStart + Integer.parseInt(child.getAttribute("position")) - 1;
+                int length = parsePicture(picture);
+                String name = child.getAttribute("name");
+                boolean isNumeric = picture.startsWith("9");
+
+                fields.add(new Field(name, position, length, isNumeric));
             }
-            String fieldName = fieldElem.getAttribute("name");
-            int position = Integer.parseInt(fieldElem.getAttribute("position"));
-            String picture = fieldElem.getAttribute("picture");
-            int length = parsePicture(picture);
-            fields.add(new Field(fieldName, position, length));
         }
-        return fields;
     }
 
     private int parsePicture(String picture) {
-        int startIdx = picture.indexOf('(');
-        int endIdx = picture.indexOf(')');
-        if (startIdx == -1 || endIdx == -1) {
-            throw new IllegalArgumentException("Invalid picture format: " + picture);
-        }
-        String lengthStr = picture.substring(startIdx + 1, endIdx);
+        String lengthStr = picture.substring(picture.indexOf('(') + 1, picture.indexOf(')'));
         return Integer.parseInt(lengthStr);
     }
 
     public void convertToCsv(File inputFile, File outputFile) throws IOException {
         List<String> lines = Files.readAllLines(inputFile.toPath(), StandardCharsets.UTF_8);
-        if (lines.isEmpty()) {
-            return;
-        }
+        if (lines.isEmpty()) return;
 
         List<String> csvLines = new ArrayList<>();
+        csvLines.add(String.join(",", allFieldNames)); // CSV header
 
-        // Process header
-        if (headerStructure != null) {
-            String headerLine = lines.get(0);
-            validateLineLength(headerLine, headerStructure.storageLength);
-            List<String> headerValues = parseLine(headerLine, headerStructure.fields);
-            csvLines.add(toCsvLine(headerValues));
-        }
+        // Process all lines
+        for (String line : lines) {
+            RecordStructure matchedStructure = findMatchingStructure(line);
+            if (matchedStructure == null) continue;
 
-        // Process data lines
-        int footerIndex = lines.size() - 1;
-        for (int i = 1; i < footerIndex; i++) {
-            String line = lines.get(i);
-            RecordStructure dataStruct = findMatchingDataStructure(line);
-            if (dataStruct == null) {
-                throw new IOException("No matching data structure found for line " + (i + 1));
-            }
-            validateLineLength(line, dataStruct.storageLength);
-            List<String> values = parseLine(line, dataStruct.fields);
-            csvLines.add(toCsvLine(values));
-        }
-
-        // Process footer
-        if (footerIndex > 0 && headerStructure != null) {
-            String footerLine = lines.get(footerIndex);
-            validateLineLength(footerLine, headerStructure.storageLength);
-            List<String> footerValues = parseLine(footerLine, headerStructure.fields);
-            csvLines.add(toCsvLine(footerValues));
+            Map<String, String> fieldValues = parseLine(line, matchedStructure.fields);
+            csvLines.add(generateCsvLine(fieldValues));
         }
 
         Files.write(outputFile.toPath(), csvLines, StandardCharsets.UTF_8);
     }
 
-    private RecordStructure findMatchingDataStructure(String line) {
-        for (RecordStructure dataStruct : dataStructures) {
-            if (line.length() != dataStruct.storageLength) {
-                continue;
+    private RecordStructure findMatchingStructure(String line) {
+        for (RecordStructure structure : recordStructures) {
+            if (line.length() != structure.storageLength) continue;
+
+            boolean valid = true;
+            for (Field field : structure.fields) {
+                if (!validateField(line, field)) {
+                    valid = false;
+                    break;
+                }
             }
-            int start = dataStruct.recNameStart - 1;
-            int end = start + dataStruct.recNameLength;
-            if (end > line.length()) {
-                continue;
-            }
-            String recName = line.substring(start, end);
-            if (recName.equals(dataStruct.recName)) {
-                return dataStruct;
-            }
+
+            if (valid) return structure;
         }
         return null;
     }
 
-    private void validateLineLength(String line, int expected) {
-        if (line.length() != expected) {
-            throw new IllegalArgumentException("Line length mismatch. Expected: " + expected + ", Actual: " + line.length());
+    private boolean validateField(String line, Field field) {
+        String value = extractValue(line, field);
+        if (field.isNumeric && !value.matches("^\\s*[-+]?\\d+\\s*$")) {
+            return false;
         }
+        return true;
     }
 
-    private List<String> parseLine(String line, List<Field> fields) {
-        List<String> values = new ArrayList<>();
+    private Map<String, String> parseLine(String line, List<Field> fields) {
+        Map<String, String> values = new HashMap<>();
         for (Field field : fields) {
-            int start = field.start - 1;
-            int end = start + field.length;
-            if (start > line.length()) {
-                values.add("");
-            } else {
-                if (end > line.length()) {
-                    end = line.length();
-                }
-                String value = line.substring(start, end).trim();
-                values.add(value);
-            }
+            values.put(field.name, extractValue(line, field).trim());
         }
         return values;
     }
 
-    private String toCsvLine(List<String> values) {
-        return values.stream()
-                .map(v -> v.contains(",") ? "\"" + v.replace("\"", "\"\"") + "\"" : v)
+    private String extractValue(String line, Field field) {
+        int start = field.position - 1;
+        int end = Math.min(start + field.length, line.length());
+        return start < line.length() ? line.substring(start, end) : "";
+    }
+
+    private String generateCsvLine(Map<String, String> fieldValues) {
+        return allFieldNames.stream()
+                .map(name -> fieldValues.getOrDefault(name, ""))
+                .map(this::escapeCsv)
                 .collect(Collectors.joining(","));
     }
 
+    private String escapeCsv(String value) {
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
+
+    // Helper classes
     private static class RecordStructure {
         String name;
         int storageLength;
         List<Field> fields;
-        String recName;
-        int recNameStart;
-        int recNameLength;
 
-        RecordStructure(String name, int storageLength, List<Field> fields, String recName, int recNameStart, int recNameLength) {
+        RecordStructure(String name, int storageLength, List<Field> fields) {
             this.name = name;
             this.storageLength = storageLength;
             this.fields = fields;
-            this.recName = recName;
-            this.recNameStart = recNameStart;
-            this.recNameLength = recNameLength;
         }
     }
 
     private static class Field {
         String name;
-        int start;
+        int position;
         int length;
+        boolean isNumeric;
 
-        Field(String name, int start, int length) {
+        Field(String name, int position, int length, boolean isNumeric) {
             this.name = name;
-            this.start = start;
+            this.position = position;
             this.length = length;
+            this.isNumeric = isNumeric;
         }
     }
 
-    public
+    public static void main(String[] args) {
+        CobolToCsvDynamicConverter converter = new CobolToCsvDynamicConverter();
+        try {
+            converter.parseXml(new File("copybook.xml"));
+            converter.convertToCsv(new File("input.txt"), new File("output.csv"));
+            System.out.println("Conversion completed successfully.");
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("Error during conversion: " + e.getMessage());
+        }
+    }
+}
